@@ -23,12 +23,12 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
+  await cleanup();
   await stopMessagePersistence(queryClient);
   localStorage.clear();
   queryClient.clear();
   resetApiState();
   worker.resetHandlers();
-  cleanup();
 });
 
 afterAll(() => {

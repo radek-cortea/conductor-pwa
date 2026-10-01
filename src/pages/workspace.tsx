@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, getRouteApi, useParams } from "@tanstack/react-router";
-import { Copy, ExternalLink, GitPullRequest, MoreHorizontal, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  Copy,
+  ExternalLink,
+  GitPullRequest,
+  MoreHorizontal,
+  Plus,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiError } from "@/api/errors";
@@ -150,21 +157,20 @@ export function WorkspacePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 px-4 pt-3 pb-2">
-        <h1 className="min-w-0 truncate text-lg font-semibold">{workspace.data.name}</h1>
-        {previewUrl ? (
-          <Button asChild variant="ghost" size="icon" className="size-11 shrink-0">
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open preview"
-              title="Open preview"
-            >
-              <ExternalLink aria-hidden="true" />
-            </a>
-          </Button>
-        ) : null}
+      <header className="z-20 flex shrink-0 items-center gap-2 border-b bg-background px-4 pt-[max(0.25rem,env(safe-area-inset-top))] pb-1">
+        <Button asChild variant="ghost" size="icon" className="shrink-0">
+          <Link
+            to="/workspaces"
+            search={{ archived: false, q: "" }}
+            aria-label="Workspaces"
+            title="Back to workspaces"
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Link>
+        </Button>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold" title={workspace.data.name}>
+          {workspace.data.name}
+        </h1>
         <div className="ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -180,6 +186,14 @@ export function WorkspacePage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {previewUrl ? (
+                <DropdownMenuItem asChild>
+                  <a href={previewUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink aria-hidden="true" />
+                    Open preview
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onSelect={() => {
                   void copyLink(workspace.data!.deepLink, "Mac app link");
@@ -223,7 +237,7 @@ export function WorkspacePage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
+      </header>
       <div className="flex shrink-0 items-center border-b px-4">
         <div role="tablist" aria-label="Chats" className="flex min-w-0 gap-1 overflow-x-auto">
           {visibleSessions.map((session) => (

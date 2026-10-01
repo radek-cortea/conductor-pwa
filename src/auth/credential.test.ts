@@ -3,6 +3,8 @@ import {
   CREDENTIAL_STORAGE_KEY,
   clearCredential,
   readCredential,
+  readRememberedCredential,
+  signOutCredential,
   writeCredential,
   type KeyValueStore,
 } from "@/auth/credential";
@@ -32,6 +34,19 @@ describe("credential storage", () => {
     expect(readCredential(store)).toBe("cond_live_key");
     clearCredential(store);
     expect(readCredential(store)).toBeNull();
+  });
+
+  it("signs out without forgetting the saved key, and can explicitly delete it", () => {
+    const store = memoryStore();
+    writeCredential("cond_saved_key", store);
+    signOutCredential(store);
+    expect(readCredential(store)).toBeNull();
+    expect(readRememberedCredential(store)).toBe("cond_saved_key");
+    writeCredential(readRememberedCredential(store)!, store);
+    expect(readCredential(store)).toBe("cond_saved_key");
+    clearCredential(store);
+    expect(readCredential(store)).toBeNull();
+    expect(readRememberedCredential(store)).toBeNull();
   });
 
   it("rejects garbage and the wrong shape", () => {

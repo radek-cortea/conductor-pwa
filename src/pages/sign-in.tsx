@@ -8,10 +8,10 @@ import { z } from "zod";
 import { ApiError } from "@/api/errors";
 import { fetchMe } from "@/api/fetch";
 import { meQuery } from "@/api/queries";
-import { writeCredential } from "@/auth/credential";
+import { clearCredential, readRememberedCredential, writeCredential } from "@/auth/credential";
 import { Button } from "@/ui/button";
 import { AppBrand } from "@/ui/app-brand";
-import { startMessagePersistence } from "@/storage/query-persistence";
+import { startMessagePersistence, stopMessagePersistence } from "@/storage/query-persistence";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 
@@ -25,10 +25,20 @@ export function SignInPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
+  const [savedKey, setSavedKey] = useState(readRememberedCredential);
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
-    defaultValues: { apiKey: "" },
+    defaultValues: { apiKey: savedKey ?? "" },
   });
+
+  async function forgetKey() {
+    clearCredential();
+    setSavedKey(null);
+    form.reset({ apiKey: "" });
+    setFormError(null);
+    await stopMessagePersistence(queryClient);
+    toast.success("Saved API key forgotten");
+  }
 
   async function onSubmit(values: SignInValues) {
     setFormError(null);
@@ -79,6 +89,21 @@ export function SignInPage() {
             <p className="text-sm text-destructive">{form.formState.errors.apiKey.message}</p>
           ) : null}
         </div>
+        {savedKey ? (
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">API key saved on this device.</span>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={form.formState.isSubmitting}
+              onClick={() => {
+                void forgetKey();
+              }}
+            >
+              Forget saved key
+            </Button>
+          </div>
+        ) : null}
         {formError ? (
           <p className="text-sm text-destructive" role="alert">
             {formError}

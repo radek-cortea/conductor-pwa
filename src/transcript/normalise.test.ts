@@ -10,6 +10,7 @@ import {
   mergeEntries,
   mergeMessages,
   normaliseMessage,
+  normaliseMessages,
   messageFormat,
 } from "@/transcript/normalise";
 
@@ -153,7 +154,96 @@ describe("transcript normaliser", () => {
         },
       },
     });
-    expect(mergeEntries(assistant, result)).toEqual(assistant);
+    expect(mergeEntries(assistant, result)).toEqual([
+      expect.objectContaining({
+        kind: "assistant",
+        text: "The login form validates the API key before it is stored.",
+        final: true,
+      }),
+    ]);
+    expect(assistant[0]).not.toHaveProperty("final");
+  });
+
+  it("attaches SDK tool inputs and matching outputs to inspectable calls", () => {
+    const call = {
+      ...toolFixture,
+      content: {
+        rawPayload: {
+          type: "assistant",
+          message: {
+            content: [
+              { type: "tool_use", id: "tool-1", name: "Shell", input: { command: "echo hello" } },
+            ],
+          },
+        },
+      },
+    };
+    const result = {
+      ...toolFixture,
+      id: "tool-result",
+      sessionIndex: 4,
+      content: {
+        rawPayload: {
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "tool-1", content: "hello", is_error: false },
+            ],
+          },
+        },
+      },
+    };
+    expect(normaliseMessages([call, result])).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        name: "Shell",
+        input: '{\n  "command": "echo hello"\n}',
+        output: "hello",
+      }),
+    ]);
+  });
+
+  it("keeps command execution details and the available tool name", () => {
+    expect(
+      normaliseMessage({
+        ...toolFixture,
+        content: {
+          type: "item.completed",
+          item: {
+            type: "command_execution",
+            name: "exec_command",
+            command: "pnpm test",
+            aggregated_output: "Tests passed",
+            exit_code: 0,
+          },
+        },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        name: "exec_command",
+        input: "pnpm test",
+        output: "Tests passed",
+        exitCode: 0,
+      }),
+    ]);
+  });
+
+  it("marks a Claude end-turn response as final", () => {
+    expect(
+      normaliseMessage({
+        ...assistantFixture,
+        content: {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "Done." }],
+          },
+        },
+      }),
+    ).toEqual([expect.objectContaining({ kind: "assistant", final: true, text: "Done." })]);
   });
 
   it("reads Cursor text messages", () => {

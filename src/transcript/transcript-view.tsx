@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { splitSystemInstructions } from "@/transcript/content";
+import type { DeliveryState } from "@/transcript/delivery";
 import type { HistoryDirection } from "@/transcript/load";
 import type { MessagesState, ReadPosition, TranscriptEntry } from "@/transcript/types";
 import { MessageMarkdown } from "@/transcript/message-markdown";
 import { Button } from "@/ui/button";
 
-export type VisibleEntry = TranscriptEntry & { pending?: boolean; queued?: boolean };
+export type VisibleEntry = TranscriptEntry & { delivery?: DeliveryState };
 type Props = {
   entries: readonly VisibleEntry[];
   state: MessagesState;
   loadingHistory: boolean;
   historyFailed: boolean;
+  finalMessageId?: string;
   onLoad: (direction: HistoryDirection) => Promise<boolean>;
   onRead: (position: ReadPosition) => void;
 };
@@ -173,6 +176,10 @@ export function TranscriptView(props: Props) {
         tabIndex={0}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         style={{ overflowAnchor: "none" }}
+        onClickCapture={(event) => {
+          if (event.target instanceof Element && event.target.closest("summary"))
+            atBottom.current = false;
+        }}
         onScroll={() => {
           const viewport = scroll.current;
           if (!viewport) return;
@@ -225,7 +232,7 @@ export function TranscriptView(props: Props) {
             void request("newer");
         }}
       >
-        <div ref={content} className="flex flex-col gap-3 px-4 py-4">
+        <div ref={content} className="flex flex-col px-4 py-4">
           {props.entries.length === 0 ? (
             <p className="text-muted-foreground">
               {props.state.endOffset < props.state.total || props.state.startOffset > 0
@@ -235,9 +242,25 @@ export function TranscriptView(props: Props) {
           ) : (
             props.entries
               .filter((entry) => entry.kind !== "unknown")
-              .map((entry) => (
-                <div key={entry.id} data-entry-id={entry.id}>
-                  <TranscriptRow entry={entry} />
+              .map((entry, index, entries) => (
+                <div
+                  key={entry.id}
+                  data-entry-id={entry.id}
+                  className={
+                    index === 0
+                      ? undefined
+                      : entry.kind === "tool" && entries[index - 1]?.kind === "tool"
+                        ? "mt-2"
+                        : "mt-3"
+                  }
+                >
+                  <TranscriptRow
+                    entry={entry}
+                    final={
+                      entry.kind === "assistant" &&
+                      (entry.final || entry.id === props.finalMessageId)
+                    }
+                  />
                 </div>
               ))
           )}
@@ -268,33 +291,117 @@ export function TranscriptView(props: Props) {
   );
 }
 
-function TranscriptRow({ entry }: { entry: VisibleEntry }) {
+function Disclosure({
+  label,
+  children,
+  compact = false,
+}: {
+  label: string;
+  children: ReactNode;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className={compact ? "text-xs leading-4 text-gray-400" : "rounded-md border px-3 py-1"}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary
+        className={
+          compact
+            ? "cursor-pointer text-xs leading-4 break-words"
+            : "min-h-11 cursor-pointer py-2 text-sm break-words"
+        }
+      >
+        {label}
+      </summary>
+      {open ? <div className={compact ? "mt-2" : "pb-2"}>{children}</div> : null}
+    </details>
+  );
+}
+
+function MessageBody({ text, markdown = false }: { text: string; markdown?: boolean }) {
+  return (
+    <>
+      {splitSystemInstructions(text).map((part) =>
+        part.kind === "system" ? (
+          <Disclosure key={part.start} label="System instructions">
+            <pre className="text-xs break-words whitespace-pre-wrap text-muted-foreground">
+              {part.text.trim()}
+            </pre>
+          </Disclosure>
+        ) : markdown ? (
+          <MessageMarkdown key={part.start} text={part.text} />
+        ) : (
+          <p key={part.start} className="break-words whitespace-pre-wrap">
+            {part.text}
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+
+function TranscriptRow({ entry, final }: { entry: VisibleEntry; final?: boolean }) {
   if (entry.kind === "user")
     return (
       <div className="ml-8 rounded-lg bg-secondary px-3 py-3">
         <p className="text-xs font-medium text-muted-foreground">You</p>
-        <p className="break-words whitespace-pre-wrap">{entry.text}</p>
-        {entry.pending ? (
+        <MessageBody text={entry.text} />
+        {entry.delivery ? (
           <p className="mt-1 text-xs text-muted-foreground">
-            {entry.queued ? "Queued" : "Sending"}
+            {
+              { sending: "Sending", queued: "Queued", sent: "Sent", processing: "Processing" }[
+                entry.delivery
+              ]
+            }
           </p>
         ) : null}
       </div>
     );
   if (entry.kind === "assistant")
     return (
-      <div className="transcript-markdown">
-        <MessageMarkdown text={entry.text} />
+      <div
+        className={`transcript-markdown${final ? " rounded-md border-l-2 border-primary/50 bg-primary/5 px-3 py-2" : ""}`}
+      >
+        {final ? <p className="mb-2 text-xs font-medium text-primary">Final response</p> : null}
+        <MessageBody text={entry.text} markdown />
       </div>
     );
   if (entry.kind === "thinking")
     return (
-      <details className="rounded-md border px-3 py-2">
-        <summary className="min-h-11 cursor-pointer py-2">Thinking</summary>
-        <p className="pb-2 break-words whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
-      </details>
+      <Disclosure label="Thinking">
+        <p className="break-words whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
+      </Disclosure>
     );
   if (entry.kind === "tool")
-    return <p className="text-sm text-muted-foreground">Tool · {entry.name}</p>;
+    return (
+      <Disclosure compact label={`Tool · ${entry.name}${entry.error ? " (failed)" : ""}`}>
+        <div className="grid gap-2 text-xs">
+          {entry.input !== undefined ? (
+            <div>
+              <p className="font-medium text-muted-foreground">Input</p>
+              <pre className="break-words whitespace-pre-wrap">{entry.input}</pre>
+            </div>
+          ) : null}
+          {entry.output !== undefined ? (
+            <div>
+              <p className="font-medium text-muted-foreground">Output</p>
+              <pre className="break-words whitespace-pre-wrap">{entry.output || "(no output)"}</pre>
+            </div>
+          ) : null}
+          {entry.exitCode !== undefined ? (
+            <p className={entry.error ? "text-destructive" : "text-muted-foreground"}>
+              Exit code: {entry.exitCode}
+            </p>
+          ) : null}
+          {entry.input === undefined && entry.output === undefined ? (
+            <p className="text-muted-foreground">No additional tool details were provided.</p>
+          ) : entry.output === undefined ? (
+            <p className="text-muted-foreground">Output is not available in the loaded messages.</p>
+          ) : null}
+        </div>
+      </Disclosure>
+    );
   return null;
 }

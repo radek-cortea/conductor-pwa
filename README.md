@@ -2,7 +2,7 @@
 
 A personal installable web app for Conductor cloud workspaces. Sign in with an API key, then read and continue the same conversation loop as the desktop app: repositories, active workspaces, transcripts, and the next prompt.
 
-The API key stays in `localStorage` on this device. It is never placed in a query string, a log, an error report, or the service worker cache.
+The API key stays in `localStorage` on this device. Signing out marks it inactive but remembers it, masked, on the sign-in page; **Forget saved key** deletes it from app storage. An inactive saved key is never used for API requests or automatic sign-in. The key is never placed in a query string, a log, an error report, or the service worker cache.
 
 ## Requirements
 
@@ -37,7 +37,9 @@ pnpm exec oxfmt
 
 The live OpenAPI document is [https://api.conductor.build/v0/openapi.json](https://api.conductor.build/v0/openapi.json). A reviewed copy is pinned at `openapi/conductor.json`. Builds do not fetch the spec.
 
-The UI uses Lucide, shadcn's recommended free icon set. The app mark in `public/favicon.svg` is adapted from `public/example.svg` to a padded square canvas and also appears in the app header. `icons:generate` uses Playwright Chromium to export the install icons, including a maskable version.
+The UI uses Lucide, shadcn's recommended free icon set. The editable app mark in `public/favicon.svg` is adapted from `public/example.svg` to a padded square canvas and appears on the sign-in page, not the authenticated header. `icons:generate` uses Playwright Chromium to export the install icons, including a maskable version.
+
+The home header has an email-triggered account menu and prefers an organization display name from `/me` when supplied. The pinned public API exposes only an organization ID, so the fallback label is the projects' common GitHub owner, otherwise `Organization`. Inside a workspace, a single header replaces the account bar: back icon, workspace name, and actions menu (including preview when available). The home screen fills the viewport; only its workspace list scrolls, while Search, Create and archive controls stay at the bottom.
 
 ## Chat history and storage
 
@@ -47,7 +49,13 @@ Messages and read positions use TanStack Query's official `react-query-persist-c
 
 Workspace actions include copying the Mac-app link and, when a matching repository PR URL is present in the fetched chat/tool results, copying that GitHub PR link. The public workspace API does not currently expose a dedicated PR field.
 
+The composer stays one line high, with compact send/cancel buttons inside it. Enter sends; Shift+Enter still permits multiline text within the fixed-height textarea.
+
+System-instruction blocks, thinking, and tool calls are collapsed by default. Tool calls show available names, inputs, outputs and exit codes on expansion; hidden details are rendered lazily. Final responses are marked separately, including deduplicated SDK result messages. Optimistic prompts distinguish Sending, Queued, Processing and Sent, and reconcile SDK echoes even when IDs differ or system instructions have been added.
+
 Malformed Markdown falls back to plain text. Unsupported agent payloads offer **Copy event format** diagnostics containing structural information, not message text, tool output, or credential values.
+
+Browser tests use the same StrictMode wrapper as the app. Slow-response regressions exercise the router's pending threshold: removing an observer can cancel a query shared with a loader. Active loaders rejoin/restart cancelled requests; aborted routes and actual API/programming errors are not retried by this recovery.
 
 ## Install
 

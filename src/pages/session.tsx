@@ -12,6 +12,7 @@ import { TranscriptSkeleton } from "@/pages/skeletons";
 import { loadHistory, markRead, type HistoryDirection } from "@/transcript/load";
 import { TranscriptView, type VisibleEntry } from "@/transcript/transcript-view";
 import { turnPhase } from "@/transcript/turn-phase";
+import { promptConfirmed, promptDelivery } from "@/transcript/delivery";
 import type { ReadPosition, TranscriptEntry } from "@/transcript/types";
 import { Button } from "@/ui/button";
 import { Textarea } from "@/ui/textarea";
@@ -24,6 +25,7 @@ type OptimisticMessage = {
   text: string;
   receivedAt: string;
   state?: "queued" | "sent";
+  afterIndex: number;
 };
 
 export function SessionPage() {
@@ -161,17 +163,16 @@ function SessionChat({ sessionId }: { sessionId: string }) {
     const text = draft.trim();
     if (!text || send.isPending) return;
     const localId = crypto.randomUUID();
+    const data = messages.data;
+    const afterIndex = data?.byOffset[data.total - 1]?.sessionIndex ?? -1;
     setOptimistic((items) => [
-      ...items.filter((item) => !item.serverId || !confirmedIds.has(item.serverId)),
-      { localId, text, receivedAt: new Date().toISOString() },
+      ...items.filter(
+        (item) => !confirmedIds.has(item.serverId ?? "") && !promptConfirmed(item, entries ?? []),
+      ),
+      { localId, text, receivedAt: new Date().toISOString(), afterIndex },
     ]);
     setDraft("");
-    const data = messages.data;
-    setTurn({
-      awaiting: true,
-      seenWorking: status === "working",
-      afterIndex: data?.byOffset[data.total - 1]?.sessionIndex ?? -1,
-    });
+    setTurn({ awaiting: true, seenWorking: status === "working", afterIndex });
     if (data && data.endOffset < data.total) void onLoad("latest");
     send.mutate({ localId, message: text });
   }
@@ -180,7 +181,9 @@ function SessionChat({ sessionId }: { sessionId: string }) {
     return [
       ...(entries ?? []),
       ...optimistic
-        .filter((item) => !item.serverId || !confirmedIds.has(item.serverId))
+        .filter(
+          (item) => !confirmedIds.has(item.serverId ?? "") && !promptConfirmed(item, entries ?? []),
+        )
         .map((item) => ({
           kind: "user" as const,
           id: item.serverId ?? item.localId,
@@ -189,11 +192,10 @@ function SessionChat({ sessionId }: { sessionId: string }) {
           receivedAt: item.receivedAt,
           sessionIndex: Number.MAX_SAFE_INTEGER,
           partIndex: 0,
-          pending: true,
-          queued: item.state === "queued" || !item.serverId,
+          delivery: promptDelivery(item, phase),
         })),
     ];
-  }, [entries, optimistic, confirmedIds]);
+  }, [entries, optimistic, confirmedIds, phase]);
   if (messages.isPending || !windowReady) return <TranscriptSkeleton />;
   if (!messages.data)
     return (
@@ -250,6 +252,11 @@ function SessionChat({ sessionId }: { sessionId: string }) {
         onRead={onRead}
         loadingHistory={history.isPending}
         historyFailed={history.isError}
+        finalMessageId={
+          status === "idle" && phase === "settled"
+            ? visible.findLast((entry) => entry.kind === "assistant")?.id
+            : undefined
+        }
       />
       <form
         className="shrink-0 bg-background px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
@@ -266,8 +273,8 @@ function SessionChat({ sessionId }: { sessionId: string }) {
             id="composer"
             value={draft}
             placeholder="Send a prompt"
-            className="min-h-24 resize-none pr-28 pb-12"
-            rows={3}
+            className="h-10 min-h-10 resize-none overflow-y-auto pr-20 leading-5"
+            rows={1}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -276,13 +283,13 @@ function SessionChat({ sessionId }: { sessionId: string }) {
               }
             }}
           />
-          <div className="absolute right-2 bottom-2 flex gap-1">
+          <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 gap-1">
             {phase === "pending" || phase === "working" ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-11"
+                className="size-7 min-h-7 min-w-7 [&_svg]:size-3.5"
                 aria-label="Cancel turn"
                 title="Cancel turn"
                 disabled={cancel.isPending}
@@ -294,7 +301,7 @@ function SessionChat({ sessionId }: { sessionId: string }) {
             <Button
               type="submit"
               size="icon"
-              className="size-11"
+              className="size-7 min-h-7 min-w-7 [&_svg]:size-3.5"
               aria-label="Send"
               title="Send"
               disabled={!draft.trim() || send.isPending}

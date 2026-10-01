@@ -4,7 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { writeCredential } from "@/auth/credential";
 import { API_ORIGIN, requestsTo, TEST_API_KEY } from "@/test/handlers";
 import { worker } from "@/test/worker";
-import { assistantFixture, toolFixture, unknownFixture } from "@/transcript/fixtures";
+import { assistantFixture, toolFixture, unknownFixture, userFixture } from "@/transcript/fixtures";
 import { markRead, messagesKey, MESSAGE_PAGE_SIZE } from "@/transcript/load";
 import type { MessagesState } from "@/transcript/types";
 import type { TranscriptMessage } from "@/api/types";
@@ -43,27 +43,36 @@ function answers(count: number) {
   }));
 }
 
-test.each(["messages", "status"])("a cold chat survives a slow %s request and StrictMode observer remounts", async (resource) => {
-  writeCredential(TEST_API_KEY);
-  worker.use(
-    http.get(`${API_ORIGIN}/v0/sessions/:sessionId/${resource}`, async ({ request }) => {
-      await delay(1_500);
-      if (resource === "status") return HttpResponse.json({ status: "working" });
-      const url = new URL(request.url);
-      const offset = Number(url.searchParams.get("offset") ?? 0);
-      const rows = url.searchParams.has("after") ? [] : [assistantFixture];
-      return HttpResponse.json({ data: rows, offset, hasMore: false });
-    }),
-  );
-  const errors = vi.spyOn(console, "error");
-  try {
-    await renderApp("/workspaces/ws-ready/sessions/ses-live");
-    await expect.element(page.getByText("The login form validates the API key before it is stored."), { timeout: 8_000 }).toBeVisible();
-    await expect.element(page.getByLabelText("Message")).toBeVisible();
-    expect(page.getByRole("heading", { name: "Could not load this page" }).query()).toBeNull();
-    expect(errors).not.toHaveBeenCalled();
-  } finally { errors.mockRestore(); }
-});
+test.each(["messages", "status"])(
+  "a cold chat survives a slow %s request and StrictMode observer remounts",
+  async (resource) => {
+    writeCredential(TEST_API_KEY);
+    worker.use(
+      http.get(`${API_ORIGIN}/v0/sessions/:sessionId/${resource}`, async ({ request }) => {
+        await delay(1_500);
+        if (resource === "status") return HttpResponse.json({ status: "working" });
+        const url = new URL(request.url);
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const rows = url.searchParams.has("after") ? [] : [assistantFixture];
+        return HttpResponse.json({ data: rows, offset, hasMore: false });
+      }),
+    );
+    const errors = vi.spyOn(console, "error");
+    try {
+      await renderApp("/workspaces/ws-ready/sessions/ses-live");
+      await expect
+        .element(page.getByText("The login form validates the API key before it is stored."), {
+          timeout: 8_000,
+        })
+        .toBeVisible();
+      await expect.element(page.getByLabelText("Message")).toBeVisible();
+      expect(page.getByRole("heading", { name: "Could not load this page" }).query()).toBeNull();
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
+  },
+);
 
 test("session renders assistant text, sends a prompt, and appends the next poll", async () => {
   writeCredential(TEST_API_KEY);
@@ -87,16 +96,189 @@ test("session renders assistant text, sends a prompt, and appends the next poll"
     .toBeVisible();
 });
 
+test("system instructions and tool details are collapsed, and the final answer is distinct", async () => {
+  writeCredential(TEST_API_KEY);
+  serveTranscript([
+    {
+      ...userFixture,
+      sessionIndex: 0,
+      content: {
+        type: "userMessage",
+        message: "<system_instruction>Hidden instruction rule.</system_instruction>\nDo the work.",
+      },
+    },
+    {
+      ...toolFixture,
+      sessionIndex: 1,
+      content: {
+        turnId: "turn",
+        rawPayload: {
+          type: "assistant",
+          message: {
+            content: [
+              { type: "tool_use", id: "call", name: "Shell", input: { command: "echo hello" } },
+            ],
+          },
+        },
+      },
+    },
+    {
+      ...toolFixture,
+      id: "tool-result",
+      sessionIndex: 2,
+      content: {
+        rawPayload: {
+          type: "user",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call", content: "hello" }],
+          },
+        },
+      },
+    },
+    {
+      ...assistantFixture,
+      sessionIndex: 3,
+      content: {
+        turnId: "turn",
+        rawPayload: {
+          type: "assistant",
+          message: {
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "The final answer." }],
+          },
+        },
+      },
+    },
+    {
+      ...assistantFixture,
+      id: "result",
+      sessionIndex: 4,
+      content: {
+        turnId: "turn",
+        rawPayload: { type: "result", subtype: "success", result: "The final answer." },
+      },
+    },
+  ]);
+  await renderApp("/workspaces/ws-ready/sessions/ses-live");
+  await expect.element(page.getByText("The final answer.", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Final response", { exact: true })).toBeVisible();
+  expect(page.getByText("Hidden instruction rule.").query()).toBeNull();
+  expect(page.getByText("hello", { exact: true }).query()).toBeNull();
+  await userEvent.click(page.getByText("System instructions", { exact: true }));
+  await expect.element(page.getByText("Hidden instruction rule.", { exact: true })).toBeVisible();
+  await userEvent.click(page.getByText("Tool · Shell", { exact: true }));
+  await expect.element(page.getByText("hello", { exact: true })).toBeVisible();
+  await expect.element(page.getByText(/"command": "echo hello"/)).toBeVisible();
+});
+
+test("tool rows are small, gray and borderless, with half-line-height gaps", async () => {
+  writeCredential(TEST_API_KEY);
+  serveTranscript(
+    Array.from({ length: 3 }, (_, index) => ({
+      ...toolFixture,
+      id: `compact-tool-${index}`,
+      sessionIndex: index,
+      content: { type: "command_execution", command: "echo hello" },
+    })),
+  );
+  await renderApp("/workspaces/ws-ready/sessions/ses-live");
+  await expect.poll(() => document.querySelectorAll("[data-entry-id] summary").length).toBe(3);
+  const summaries = Array.from(document.querySelectorAll<HTMLElement>("[data-entry-id] summary"));
+  const style = getComputedStyle(summaries[0]!);
+  expect(style.fontSize).toBe("12px");
+  expect(style.lineHeight).toBe("16px");
+  expect(summaries[0]!.closest("details")!.classList.contains("text-gray-400")).toBe(true);
+  expect(getComputedStyle(summaries[0]!.closest("details")!).borderTopWidth).toBe("0px");
+  for (let index = 1; index < summaries.length; index++) {
+    const row = summaries[index]!.closest("[data-entry-id]")!;
+    const previous = summaries[index - 1]!.closest("[data-entry-id]")!;
+    expect(row.getBoundingClientRect().top - previous.getBoundingClientRect().bottom).toBeCloseTo(
+      parseFloat(style.lineHeight) / 2,
+      1,
+    );
+  }
+});
+
+test("a processed prompt is not stuck queued, even when the SDK echo has a different ID", async () => {
+  writeCredential(TEST_API_KEY);
+  let posted: string | undefined;
+  worker.use(
+    http.post(`${API_ORIGIN}/v0/sessions/:sessionId/messages`, async ({ request }) => {
+      posted = ((await request.json()) as { message: string }).message;
+      return HttpResponse.json(
+        {
+          messageId: "api-accepted-id",
+          state: "queued",
+          deepLink: "conductor://sessions/ses-live",
+        },
+        { status: 201 },
+      );
+    }),
+    http.get(`${API_ORIGIN}/v0/sessions/:sessionId/messages`, async ({ request }) => {
+      const url = new URL(request.url);
+      if (!url.searchParams.has("after"))
+        return HttpResponse.json({
+          data: [userFixture, assistantFixture, unknownFixture],
+          offset: 0,
+          hasMore: false,
+        });
+      if (!posted) return HttpResponse.json({ data: [], offset: 3, hasMore: false });
+      await delay(1_500);
+      return HttpResponse.json({
+        data: [
+          {
+            ...userFixture,
+            id: "sdk-echo-id",
+            sessionIndex: 5,
+            content: {
+              type: "userMessage",
+              message: `<system_instruction>System rules</system_instruction>\n${posted}`,
+            },
+          },
+          {
+            ...assistantFixture,
+            id: "new-reply",
+            sessionIndex: 6,
+            content: {
+              type: "assistant",
+              message: { content: [{ type: "text", text: "Prompt processed." }] },
+            },
+          },
+        ],
+        offset: 3,
+        hasMore: false,
+      });
+    }),
+  );
+  await renderApp("/workspaces/ws-ready/sessions/ses-live");
+  await expect.element(page.getByLabelText("Message")).toBeVisible();
+  await userEvent.fill(page.getByLabelText("Message"), "Check this prompt");
+  await userEvent.click(page.getByRole("button", { name: "Send", exact: true }));
+  await expect.element(page.getByText("Processing", { exact: true })).toBeVisible();
+  expect(page.getByText("Queued", { exact: true }).query()).toBeNull();
+  await expect
+    .element(page.getByText("Prompt processed.", { exact: true }), { timeout: 5_000 })
+    .toBeVisible();
+  await expect.element(page.getByText("Check this prompt", { exact: true })).toBeVisible();
+  expect(document.querySelector('[data-entry-id="api-accepted-id"]')).toBeNull();
+});
+
 test("send and cancel controls are inside the prompt textarea", async () => {
   writeCredential(TEST_API_KEY);
   await renderApp("/workspaces/ws-ready/sessions/ses-live");
   await expect.element(page.getByLabelText("Message")).toBeVisible();
-  const input = page.getByLabelText("Message").element().getBoundingClientRect();
+  const textarea = page.getByLabelText("Message").element();
+  expect(textarea.getAttribute("rows")).toBe("1");
+  const input = textarea.getBoundingClientRect();
+  expect(input.height).toBe(40);
   for (const name of ["Send", "Cancel turn"]) {
     const button = page
       .getByRole("button", { name, exact: true })
       .element()
       .getBoundingClientRect();
+    expect(button.width).toBe(28);
+    expect(button.height).toBe(28);
     expect(button.left).toBeGreaterThanOrEqual(input.left);
     expect(button.right).toBeLessThanOrEqual(input.right);
     expect(button.top).toBeGreaterThanOrEqual(input.top);
@@ -286,7 +468,7 @@ test("a malformed message page leaves navigation available instead of throwing a
   await expect
     .element(page.getByText("Conductor returned an unsupported message-page format."))
     .toBeVisible();
-  await expect.element(page.getByRole("link", { name: "Conductor PWA" })).toBeVisible();
+  await expect.element(page.getByRole("link", { name: "Workspaces", exact: true })).toBeVisible();
 });
 
 test("cancel posts to the cancel route", async () => {

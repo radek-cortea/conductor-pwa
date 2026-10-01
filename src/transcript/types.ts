@@ -9,9 +9,18 @@ export type TranscriptEntry = {
   offset?: number;
 } & (
   | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string; turnId?: string; source?: "result" }
+  | { kind: "assistant"; text: string; turnId?: string; source?: "result"; final?: boolean }
   | { kind: "thinking"; text: string; turnId?: string }
-  | { kind: "tool"; name: string; turnId?: string }
+  | {
+      kind: "tool";
+      name: string;
+      turnId?: string;
+      toolId?: string;
+      input?: string;
+      output?: string;
+      exitCode?: number;
+      error?: boolean;
+    }
   | { kind: "unknown" }
 );
 

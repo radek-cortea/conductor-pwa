@@ -19,6 +19,7 @@ const protocolTypes = new Set([
   "result",
   "user",
   "tool_result",
+  "function_call_output",
   "stream_event",
   "ping",
   "usage",
@@ -84,16 +85,20 @@ export function mergeEntries(
 ): TranscriptEntry[] {
   const byId = new Map<string, TranscriptEntry>();
   for (const entry of [...existing, ...incoming]) byId.set(entry.id, entry);
-  const sorted = [...byId.values()].sort(
-    (a, b) => a.sessionIndex - b.sessionIndex || a.partIndex - b.partIndex,
-  );
-  const answers = new Set<string>();
+  const sorted = [...byId.values()]
+    .sort((a, b) => a.sessionIndex - b.sessionIndex || a.partIndex - b.partIndex)
+    .map((entry) => ({ ...entry }));
+  const answers = new Map<string, Extract<TranscriptEntry, { kind: "assistant" }>>();
   return sorted.filter((entry) => {
     if (entry.kind === "user") answers.clear();
     if (entry.kind !== "assistant") return true;
     const key = `${entry.turnId ?? ""}:${entry.text.trim()}`;
-    if (entry.source === "result" && answers.has(key)) return false;
-    answers.add(key);
+    const previous = answers.get(key);
+    if (entry.source === "result" && previous) {
+      previous.final = true;
+      return false;
+    }
+    answers.set(key, entry);
     return true;
   });
 }
@@ -102,8 +107,48 @@ export function takeNewest(entries: readonly TranscriptEntry[], cap: number): Tr
   return mergeEntries([], entries).slice(-cap);
 }
 
+function detail(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "Details could not be displayed.";
+  }
+}
+
 export function normaliseMessages(messages: readonly TranscriptMessage[]): TranscriptEntry[] {
-  return mergeEntries([], messages.flatMap(normaliseMessage));
+  const outputs = new Map<string, { output?: string; error: boolean }>();
+  function collect(value: unknown, depth = 0) {
+    if (depth > 12) return;
+    value = decode(value);
+    if (Array.isArray(value)) {
+      value.forEach((child) => collect(child, depth + 1));
+      return;
+    }
+    const raw = payload(value);
+    if (!raw) return;
+    if (raw.type === "tool_result" && typeof raw.tool_use_id === "string") {
+      outputs.set(raw.tool_use_id, { output: detail(raw.content), error: raw.is_error === true });
+      return;
+    }
+    if (raw.type === "function_call_output" && typeof raw.call_id === "string") {
+      outputs.set(raw.call_id, { output: detail(raw.output), error: raw.is_error === true });
+      return;
+    }
+    for (const key of containers) if (raw[key] !== undefined) collect(raw[key], depth + 1);
+  }
+  for (const message of messages) collect(message.content);
+  return mergeEntries(
+    [],
+    messages.flatMap(normaliseMessage).map((entry) => {
+      if (entry.kind !== "tool" || !entry.toolId) return entry;
+      const result = outputs.get(entry.toolId);
+      return result
+        ? { ...entry, output: result.output ?? entry.output, error: result.error || entry.error }
+        : entry;
+    }),
+  );
 }
 
 export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] {
@@ -148,6 +193,12 @@ export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] 
     const turn = turnId ? { turnId } : {};
     const type = typeof raw.type === "string" ? raw.type : undefined;
     const text = raw.type === "thinking" ? (raw.thinking ?? raw.text) : raw.text;
+    const complete =
+      raw.stop_reason === "end_turn" ||
+      raw.stopReason === "end_turn" ||
+      raw.phase === "final_answer" ||
+      raw.isFinal === true;
+    const final = complete ? { final: true } : {};
 
     if (type === "result") {
       if (
@@ -156,22 +207,45 @@ export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] 
         typeof raw.result === "string" &&
         raw.result.trim()
       )
-        add({ kind: "assistant", text: raw.result, source: "result", ...turn });
+        add({ kind: "assistant", text: raw.result, source: "result", final: true, ...turn });
       return;
     }
     // SDK user messages are tool results, not prompts or agent replies.
     if (raw.role === "user" || (type && protocolTypes.has(type))) return;
     if (typeof raw.method === "string" && /(?:delta|started)$/.test(raw.method)) return;
     if ((type === "text" || type === "output_text") && typeof text === "string" && text.trim()) {
-      add({ kind: "assistant", text, ...turn });
+      add({ kind: "assistant", text, ...turn, ...final });
       return;
     }
     if (type === "thinking" && typeof text === "string" && text.trim()) {
       add({ kind: "thinking", text, ...turn });
       return;
     }
-    if ((type === "tool_use" || type === "tool_call") && typeof raw.name === "string") {
-      add({ kind: "tool", name: raw.name, ...turn });
+    if (["tool_use", "tool_call", "function_call", "mcp_tool_call"].includes(type ?? "")) {
+      const fn = payload(raw.function);
+      const name =
+        typeof raw.name === "string"
+          ? raw.name
+          : typeof fn?.name === "string"
+            ? fn.name
+            : typeof raw.tool === "string"
+              ? [raw.server, raw.tool].filter((part) => typeof part === "string").join(" / ")
+              : undefined;
+      if (name)
+        add({
+          kind: "tool",
+          name,
+          toolId:
+            typeof raw.call_id === "string"
+              ? raw.call_id
+              : typeof raw.id === "string"
+                ? raw.id
+                : undefined,
+          input: detail(raw.input ?? raw.arguments ?? fn?.arguments),
+          output: detail(raw.result ?? raw.output ?? raw.error),
+          error: raw.is_error === true || (raw.error !== undefined && raw.error !== null),
+          ...turn,
+        });
       return;
     }
     if (type === "item.completed" || raw.method === "item/completed") {
@@ -190,14 +264,37 @@ export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] 
       return;
     }
     if (type === "command_execution" || type === "commandExecution") {
-      add({ kind: "tool", name: "Shell", ...turn });
+      const name =
+        typeof raw.name === "string"
+          ? raw.name
+          : typeof raw.toolName === "string"
+            ? raw.toolName
+            : typeof raw.tool_name === "string"
+              ? raw.tool_name
+              : "Shell";
+      const exitCode =
+        typeof raw.exit_code === "number"
+          ? raw.exit_code
+          : typeof raw.exitCode === "number"
+            ? raw.exitCode
+            : undefined;
+      add({
+        kind: "tool",
+        name,
+        toolId: typeof raw.id === "string" ? raw.id : undefined,
+        input: detail(raw.command ?? raw.input),
+        output: detail(raw.aggregated_output ?? raw.output),
+        exitCode,
+        error: exitCode !== undefined && exitCode !== 0,
+        ...turn,
+      });
       return;
     }
     assistant ||=
       raw.role === "assistant" ||
       ["assistant", "assistantMessage", "agentMessage", "agent_message"].includes(type ?? "");
     if (assistant && typeof text === "string" && text.trim()) {
-      add({ kind: "assistant", text, ...turn });
+      add({ kind: "assistant", text, ...turn, ...final });
       return;
     }
     // Only follow documented message containers, never tool inputs/results or usage metadata.
@@ -207,7 +304,12 @@ export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] 
       // An unparseable rawPayload must not become a JSON/log-shaped chat bubble.
       const childAssistant = key === "message" || key === "content" ? assistant : false;
       visit(raw[key], childAssistant, turnId, depth + 1);
-      if (entries.length > before) return;
+      if (entries.length > before) {
+        if (complete)
+          for (const entry of entries.slice(before))
+            if (entry.kind === "assistant") entry.final = true;
+        return;
+      }
     }
   }
   visit(decoded, ["assistant", "assistantMessage", "agentMessage"].includes(message.type));

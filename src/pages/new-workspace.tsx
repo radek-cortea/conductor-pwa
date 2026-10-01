@@ -89,7 +89,7 @@ export function NewWorkspacePage() {
   if (projects.isPending) return <ListSkeleton />;
 
   return (
-    <main className="flex flex-1 flex-col px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <h1 className="text-2xl font-semibold">Start a workspace</h1>
       <p className="mt-2 text-muted-foreground">
         Pick a repository and an opening prompt. The new chat opens as soon as Conductor accepts it.

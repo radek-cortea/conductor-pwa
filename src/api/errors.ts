@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { clearCredential, readCredential } from "@/auth/credential";
+import { signOutCredential, readCredential } from "@/auth/credential";
 import { notifyUnauthorized } from "@/auth/unauthorized";
 
 const errorBodySchema = z.object({
@@ -29,7 +29,7 @@ export function toApiError(status: number, body: unknown): ApiError {
   const parsed = errorBodySchema.safeParse(body);
   const userMessage = parsed.success ? parsed.data.userMessage : fallbackMessage(status);
   if (status === 401 && readCredential()) {
-    clearCredential();
+    signOutCredential();
     notifyUnauthorized();
   }
   return new ApiError(status, userMessage);
