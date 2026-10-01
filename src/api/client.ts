@@ -5,10 +5,25 @@ import { readCredential } from "@/auth/credential";
 import { notifyUnauthorized } from "@/auth/unauthorized";
 
 export const API_ORIGIN = "https://api.conductor.build";
+const responseCredentials = new WeakMap<Response, string>();
 
 export function createConductorClient(apiKey: string) {
   return createClient<paths>({
     baseUrl: API_ORIGIN,
+    fetch: async (request) => {
+      if (new URL(request.url).origin !== API_ORIGIN) throw new Error("Unexpected API origin");
+      // Do not follow API redirects, send cookies/referrers, or cache private responses.
+      const response = await fetch(
+        new Request(request, {
+          redirect: "error",
+          cache: "no-store",
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+        }),
+      );
+      responseCredentials.set(response, apiKey);
+      return response;
+    },
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: "application/json",
@@ -35,7 +50,11 @@ export async function callApi<T>(run: () => Promise<CallResult<T>>): Promise<T> 
   try {
     const result = await run();
     if (!result.response.ok || result.data === undefined) {
-      throw toApiError(result.response.status, result.error);
+      throw toApiError(
+        result.response.status,
+        result.error,
+        responseCredentials.get(result.response),
+      );
     }
     return result.data;
   } catch (error) {

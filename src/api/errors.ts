@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { signOutCredential, readCredential } from "@/auth/credential";
+import { signOutCredential, readCredential, readRememberedCredential } from "@/auth/credential";
 import { notifyUnauthorized } from "@/auth/unauthorized";
 
 const errorBodySchema = z.object({
@@ -25,12 +25,20 @@ function fallbackMessage(status: number): string {
   return "The request failed.";
 }
 
-export function toApiError(status: number, body: unknown): ApiError {
+export function toApiError(status: number, body: unknown, requestKey?: string): ApiError {
   const parsed = errorBodySchema.safeParse(body);
-  const userMessage = parsed.success ? parsed.data.userMessage : fallbackMessage(status);
-  if (status === 401 && readCredential()) {
+  let userMessage = parsed.success ? parsed.data.userMessage : fallbackMessage(status);
+  for (const key of [requestKey, readRememberedCredential()]) {
+    if (key)
+      userMessage = userMessage
+        .replaceAll(key, "[redacted]")
+        .replaceAll(encodeURIComponent(key), "[redacted]");
+  }
+  userMessage = userMessage.replace(/\bBearer\s+[^\s"'<>]+/gi, "Bearer [redacted]");
+  // A response for a logged-out/replaced key cannot invalidate a newer account.
+  if (status === 401 && requestKey && readCredential() === requestKey) {
     signOutCredential();
     notifyUnauthorized();
   }
-  return new ApiError(status, userMessage);
+  return new ApiError(status, userMessage.slice(0, 1000));
 }

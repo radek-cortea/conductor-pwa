@@ -336,6 +336,21 @@ describe("transcript normaliser", () => {
     expect(format).not.toContain("top-secret");
   });
 
+  it("diagnostics do not leak private data embedded in object keys", () => {
+    const format = messageFormat({
+      ...assistantFixture,
+      content: {
+        rawPayload: {
+          "Private prompt as a field name": { "conductor-credential-in-key": "anything" },
+          type: "unknown",
+        },
+      },
+    });
+    expect(format).not.toContain("Private prompt");
+    expect(format).not.toContain("conductor-credential-in-key");
+    expect(format).toContain("<field-");
+  });
+
   it("merges pages by message id and keeps sessionIndex order", () => {
     const first = [
       { id: "b", sessionIndex: 1 },

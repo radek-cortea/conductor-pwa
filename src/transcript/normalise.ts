@@ -316,6 +316,42 @@ export function normaliseMessage(message: TranscriptMessage): TranscriptEntry[] 
   return entries;
 }
 
+// Unknown object keys can themselves contain prompt text or credentials.
+const diagnosticFields = new Set([
+  ...containers,
+  "type",
+  "role",
+  "method",
+  "id",
+  "sessionId",
+  "sessionIndex",
+  "messageId",
+  "turnId",
+  "turn_id",
+  "name",
+  "text",
+  "thinking",
+  "input",
+  "output",
+  "arguments",
+  "result",
+  "subtype",
+  "status",
+  "is_error",
+  "error",
+  "item",
+  "delta",
+  "summary",
+  "stop_reason",
+  "tool_use_id",
+  "call_id",
+  "parent_tool_use_id",
+  "command",
+  "exit_code",
+  "aggregated_output",
+  "usage",
+]);
+
 // Copyable, structural diagnostics: no prompt text, tool output, credentials or URLs.
 export function messageFormat(message: TranscriptMessage): string {
   function shape(value: unknown, depth = 0): unknown {
@@ -328,8 +364,8 @@ export function messageFormat(message: TranscriptMessage): string {
       Object.entries(raw)
         .slice(0, 16)
         .filter(([key]) => !/secret|password|token|authorization|apiKey/i.test(key))
-        .map(([key, child]) => [
-          key,
+        .map(([key, child], index) => [
+          diagnosticFields.has(key) ? key : `<field-${index}>`,
           (key === "type" || key === "role" || key === "method") &&
           typeof child === "string" &&
           diagnosticNames.has(child)

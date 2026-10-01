@@ -53,7 +53,7 @@ Workspace actions include copying the Mac-app link and, when a matching reposito
 
 The composer stays one line high, with compact send/cancel buttons inside it. Enter sends; Shift+Enter still permits multiline text within the fixed-height textarea.
 
-System-instruction blocks, thinking, and tool calls are collapsed by default. Tool calls show available names, inputs, outputs and exit codes on expansion; hidden details are rendered lazily. Final responses are marked separately, including deduplicated SDK result messages. Optimistic prompts distinguish Sending, Queued, Processing and Sent, and reconcile SDK echoes even when IDs differ or system instructions have been added.
+System-instruction blocks, thinking, and tool calls are collapsed by default. Tool calls show available names, inputs, outputs and exit codes on expansion; hidden details are rendered lazily. Remote Markdown images are inert placeholders to prevent automatic tracking requests. Final responses are marked separately, including deduplicated SDK result messages. Optimistic prompts distinguish Sending, Queued, Processing and Sent, and reconcile SDK echoes even when IDs differ or system instructions have been added.
 
 Malformed Markdown falls back to plain text. Unsupported agent payloads offer **Copy event format** diagnostics containing structural information, not message text, tool output, or credential values.
 
@@ -62,6 +62,8 @@ Browser tests use the same StrictMode wrapper as the app. Slow-response regressi
 ## Install
 
 `pnpm build` emits a standalone PWA. The service worker precaches the app shell and leaves `https://api.conductor.build` on the network.
+
+See [SECURITY.md](SECURITY.md) for the pre-publication review, hardened request/rendering behavior, verification commands and residual browser-storage risks.
 
 ## GitHub Pages
 

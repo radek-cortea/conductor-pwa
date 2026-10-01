@@ -38,6 +38,28 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [
+    {
+      name: "production-security-policy",
+      apply: "build",
+      transformIndexHtml() {
+        return [
+          {
+            tag: "meta",
+            attrs: {
+              "http-equiv": "Content-Security-Policy",
+              content:
+                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.conductor.build; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+            },
+            injectTo: "head-prepend",
+          },
+          {
+            tag: "meta",
+            attrs: { name: "referrer", content: "no-referrer" },
+            injectTo: "head-prepend",
+          },
+        ];
+      },
+    },
     tanstackRouter({
       target: "react",
       autoCodeSplitting: false,

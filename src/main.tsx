@@ -24,19 +24,25 @@ if (!root) {
   throw new Error("Root element missing");
 }
 
-await startMessagePersistence(readCredential(), queryClient);
-window.addEventListener("pagehide", () => {
-  void flushStoredMessages();
-});
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") void flushStoredMessages();
-});
+if (import.meta.env.PROD && window.top !== window.self) {
+  // Pages cannot set frame-ancestors through a meta CSP. Do not expose a signed-in
+  // UI to clickjacking: refuse framed production startup before reading credentials.
+  root.textContent = "Open Conductor PWA directly in a browser tab.";
+} else {
+  await startMessagePersistence(readCredential(), queryClient);
+  window.addEventListener("pagehide", () => {
+    void flushStoredMessages();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void flushStoredMessages();
+  });
 
-createRoot(root).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <Toaster />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+  createRoot(root).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+        <Toaster />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+}

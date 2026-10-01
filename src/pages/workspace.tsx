@@ -30,6 +30,7 @@ import type { PickerAgent, Session } from "@/api/types";
 import { rememberChat } from "@/lib/chats";
 import { copyText } from "@/lib/copy";
 import { findPullRequestLink } from "@/lib/pull-request";
+import { safeWebUrl, safeMacUrl } from "@/lib/safe-url";
 import { agentModels } from "@/lib/agent-models";
 import { sessionStatusLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -153,7 +154,8 @@ export function WorkspacePage() {
   const visibleSessions = (sessions.data ?? []).filter(
     (session) => search.archived || !session.archivedAt,
   );
-  const previewUrl = preview.data?.preview?.url;
+  const previewUrl = safeWebUrl(preview.data?.preview?.url);
+  const macUrl = safeMacUrl(workspace.data.deepLink);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -194,20 +196,24 @@ export function WorkspacePage() {
                   </a>
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem
-                onSelect={() => {
-                  void copyLink(workspace.data!.deepLink, "Mac app link");
-                }}
-              >
-                <Copy aria-hidden="true" />
-                Copy Mac app link
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <a href={workspace.data.deepLink}>
-                  <ExternalLink aria-hidden="true" />
-                  Open in Mac app
-                </a>
-              </DropdownMenuItem>
+              {macUrl ? (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void copyLink(macUrl, "Mac app link");
+                  }}
+                >
+                  <Copy aria-hidden="true" />
+                  Copy Mac app link
+                </DropdownMenuItem>
+              ) : null}
+              {macUrl ? (
+                <DropdownMenuItem asChild>
+                  <a href={macUrl}>
+                    <ExternalLink aria-hidden="true" />
+                    Open in Mac app
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
               {prLink ? (
                 <DropdownMenuItem
                   onSelect={() => {
