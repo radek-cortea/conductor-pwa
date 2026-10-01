@@ -9,6 +9,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vitest/config";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
+const base = process.env.PAGES_BASE_PATH || "/";
 
 const chromePath = [
   process.env.CHROME_PATH,
@@ -20,6 +21,7 @@ const chromePath = [
 ].find((candidate): candidate is string => typeof candidate === "string" && existsSync(candidate));
 
 export default defineConfig({
+  base,
   resolve: {
     alias: {
       "@": path.resolve(root, "src"),
@@ -57,16 +59,16 @@ export default defineConfig({
         name: "Conductor PWA",
         short_name: "Conductor PWA",
         description: "Conductor cloud workspaces on your phone.",
-        start_url: "/",
-        scope: "/",
+        start_url: base,
+        scope: base,
         display: "standalone",
         background_color: "#ffffff",
         theme_color: "#ffffff",
         icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: `${base}icons/icon-192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${base}icons/icon-512.png`, sizes: "512x512", type: "image/png" },
           {
-            src: "/icons/icon-512-maskable.png",
+            src: `${base}icons/icon-512-maskable.png`,
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
@@ -74,7 +76,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: "index.html",
+        navigateFallback: `${base}index.html`,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         globIgnores: ["**/node_modules/**/*", "sw.js", "workbox-*.js", "**/mockServiceWorker.js"],
         runtimeCaching: (["GET", "HEAD", "POST"] as const).map((method) => ({

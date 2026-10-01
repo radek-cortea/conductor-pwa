@@ -1,4 +1,4 @@
-import { createRouter, type RouterHistory } from "@tanstack/react-router";
+import { createHashHistory, createRouter, type RouterHistory } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/query-client";
 import { routeTree } from "@/routeTree.gen";
@@ -7,7 +7,9 @@ export function createAppRouter(client: QueryClient = queryClient, history?: Rou
   return createRouter({
     routeTree,
     context: { queryClient: client },
-    history,
+    history:
+      history ??
+      (import.meta.env.VITE_PAGES_HASH_ROUTING === "true" ? createHashHistory() : undefined),
     defaultPreloadStaleTime: 0,
   });
 }

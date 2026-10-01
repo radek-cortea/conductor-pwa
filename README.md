@@ -62,3 +62,23 @@ Browser tests use the same StrictMode wrapper as the app. Slow-response regressi
 ## Install
 
 `pnpm build` emits a standalone PWA. The service worker precaches the app shell and leaves `https://api.conductor.build` on the network.
+
+## GitHub Pages
+
+Remote: `https://github.com/radek-cortea/conductor-pwa.git`. The Pages URL is `https://radek-cortea.github.io/conductor-pwa/` once enabled and deployed.
+
+1. Keep the repository private if desired; private-repository Pages requires GitHub Pro or an eligible paid plan. Do not change visibility just to enable hosting without reviewing the source.
+2. In **Settings → Pages → Build and deployment**, select **GitHub Actions** (or use `gh api --method POST repos/radek-cortea/conductor-pwa/pages -f build_type=workflow`).
+3. Push `main`, or manually run **Deploy GitHub Pages** under Actions. `.github/workflows/pages.yml` builds and uploads `dist`, then deploys it. No Conductor API key belongs in GitHub secrets or build-time variables: each user signs in in their browser.
+
+The workflow obtains the correct base path from `actions/configure-pages`, including for a custom domain. GitHub builds use hash routing (`#/workspaces/...`) so refreshing or sharing a nested route does not depend on unavailable server-side SPA rewrites. Local development continues using normal paths. Icons, manifest start URL/scope, and service-worker navigation fallback use the deployment base path.
+
+To test the repository-path build locally:
+
+```bash
+PAGES_BASE_PATH=/conductor-pwa/ VITE_PAGES_HASH_ROUTING=true pnpm build
+PAGES_BASE_PATH=/conductor-pwa/ pnpm exec vite preview --port 43124
+# Open http://localhost:43124/conductor-pwa/
+```
+
+**Security:** Pages-hosted repositories on the same `<owner>.github.io` hostname share an origin and browser storage. Host this credential-bearing app on a dedicated custom domain if other sites on that hostname are not fully trusted. Saved keys from localhost do not transfer to the Pages origin. The Conductor API's CORS preflight permits cross-origin Authorization requests; authenticated live API behavior is still separate from static-hosting verification.
