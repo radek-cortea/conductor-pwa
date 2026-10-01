@@ -100,7 +100,13 @@ export default defineConfig({
       workbox: {
         navigateFallback: `${base}index.html`,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        globIgnores: ["**/node_modules/**/*", "sw.js", "workbox-*.js", "**/mockServiceWorker.js"],
+        globIgnores: [
+          "**/node_modules/**/*",
+          "sw.js",
+          "workbox-*.js",
+          "**/mockServiceWorker.js",
+          "example.svg",
+        ],
         runtimeCaching: (["GET", "HEAD", "POST"] as const).map((method) => ({
           urlPattern: /^https:\/\/api\.conductor\.build\/.*/i,
           handler: "NetworkOnly" as const,

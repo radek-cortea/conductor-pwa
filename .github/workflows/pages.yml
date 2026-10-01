@@ -33,11 +33,11 @@ jobs:
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           VITE_PAGES_HASH_ROUTING: "true"
+      - run: rm -f dist/mockServiceWorker.js dist/example.svg
       - run: pnpm exec playwright install --with-deps chromium
       - run: node scripts/security-smoke.mjs
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-      - run: rm -f dist/mockServiceWorker.js dist/example.svg
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: dist
