@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "ignorePatterns": [
+    "src/api/generated/**",
+    "src/routeTree.gen.ts",
+    "dist/**",
+    "dev-dist/**",
+    "public/mockServiceWorker.js",
+    "pnpm-lock.yaml"
+  ],
+  "sortTailwindcss": {
+    "functions": ["cn", "cva"],
+    "stylesheet": "./src/index.css"
+  }
+}
