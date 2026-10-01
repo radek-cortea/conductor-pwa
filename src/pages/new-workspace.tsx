@@ -1,13 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { ApiError } from "@/api/errors";
 import { createWorkspace } from "@/api/fetch";
-import { projectsQuery } from "@/api/queries";
+import { meQuery, projectsQuery } from "@/api/queries";
+import { createOptionsKey, readCreateOptions, writeCreateOptions } from "@/lib/create-options";
 import { agentModels } from "@/lib/agent-models";
 import { applyAgentChange } from "@/lib/agent-picker";
 import { AgentFields } from "@/pages/agent-fields";
@@ -36,23 +37,30 @@ export function NewWorkspacePage() {
   const navigate = newWorkspaceRoute.useNavigate();
   const queryClient = useQueryClient();
   const projects = useQuery(projectsQuery());
+  const me = useQuery(meQuery());
+  const optionsKey = createOptionsKey(me.data?.userId ?? "", me.data?.organizationId ?? "");
+  const [defaults] = useState(() =>
+    readCreateOptions(
+      optionsKey,
+      (projects.data ?? []).map((project) => project.id),
+    ),
+  );
   const [formError, setFormError] = useState<string | null>(null);
-  const defaults = agentModels.claude;
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      projectId: "",
-      branch: "",
+      ...defaults,
       name: "",
-      agent: "claude",
-      model: defaults.defaultModel,
-      effort: defaults.defaultEffort,
       message: "",
     },
   });
   const agent = form.watch("agent");
   const model = form.watch("model");
   const effort = form.watch("effort");
+  useEffect(() => {
+    const subscription = form.watch((values) => writeCreateOptions(optionsKey, values));
+    return () => subscription.unsubscribe();
+  }, [form, optionsKey]);
 
   async function onSubmit(values: FormValues) {
     setFormError(null);
@@ -91,15 +99,13 @@ export function NewWorkspacePage() {
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <h1 className="text-2xl font-semibold">Start a workspace</h1>
-      <p className="mt-2 text-muted-foreground">
-        Pick a repository and an opening prompt. The new chat opens as soon as Conductor accepts it.
-      </p>
       <form className="mt-6 grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <div className="grid gap-2">
           <Label htmlFor="project">Project</Label>
           <Select
             value={form.watch("projectId")}
             onValueChange={(value) => {
+              if (value !== form.getValues("projectId")) form.setValue("branch", "");
               form.setValue("projectId", value, { shouldValidate: true });
             }}
           >

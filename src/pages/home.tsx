@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import { Archive, Plus, Search, X } from "lucide-react";
+import { Archive, Search, X } from "lucide-react";
 import { useState } from "react";
 import { projectsQuery, workspaceStatusQuery, workspacesQuery } from "@/api/queries";
 import type { Workspace } from "@/api/types";
@@ -101,10 +101,7 @@ export function HomePage() {
             {searchOpen ? <X aria-hidden="true" /> : <Search aria-hidden="true" />}
           </Button>
           <Button asChild className="min-h-11 flex-1 px-3">
-            <Link to="/workspaces/new">
-              <Plus aria-hidden="true" />
-              Create
-            </Link>
+            <Link to="/workspaces/new">Create</Link>
           </Button>
           <Button asChild variant="ghost" className="min-h-11 shrink-0 gap-1 px-2">
             <Link

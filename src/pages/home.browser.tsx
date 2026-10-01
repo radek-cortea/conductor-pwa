@@ -22,6 +22,9 @@ test("home has compact controls and an ungrouped, borderless workspace list", as
   expect(page.getByRole("heading", { name: "Conductor" }).query()).toBeNull();
   expect(page.getByText("Newest activity first.").query()).toBeNull();
   expect(page.getByText("https://github.com/cortea/conductor").query()).toBeNull();
+  expect(
+    page.getByRole("link", { name: "Create", exact: true }).element().querySelector("svg"),
+  ).toBeNull();
   const controls = [
     page.getByRole("button", { name: "Search workspaces" }),
     page.getByRole("link", { name: "Create", exact: true }),

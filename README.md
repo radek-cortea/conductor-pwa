@@ -41,6 +41,8 @@ The UI uses Lucide, shadcn's recommended free icon set. The editable app mark in
 
 The home header has an email-triggered account menu and prefers an organization display name from `/me` when supplied. The pinned public API exposes only an organization ID, so the fallback label is the projects' common GitHub owner, otherwise `Organization`. Inside a workspace, a single header replaces the account bar: back icon, workspace name, and actions menu (including preview when available). The home screen fills the viewport; only its workspace list scrolls, while Search, Create and archive controls stay at the bottom.
 
+Creation remembers the last project, branch, agent, model and effort on this device, scoped to the user and organization. Workspace names and prompt text are not remembered. Unavailable projects and obsolete model/effort choices fall back safely.
+
 ## Chat history and storage
 
 Chats open at the PWA's first locally unread message, or at the latest messages when everything is read (or no read position exists). Read positions are local to this PWA, not synchronized with the Mac app. There is no **load more** button: empty viewport space fills automatically, and scrolling up fetches older windows without moving the visible message. The API has no tail/count endpoint, so a cold chat finds its end with one-event offset probes instead of walking its whole history.
