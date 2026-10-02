@@ -144,8 +144,7 @@ test("workspace uses icon controls and keeps archived chats in the tab menu", as
     .toHaveAttribute("href", "conductor://workspaces/ws-ready");
 });
 
-test("workspace actions copy Mac and matching GitHub PR links", async () => {
-  writeCredential(TEST_API_KEY);
+function withPullRequest() {
   worker.use(
     http.get(`${API_ORIGIN}/v0/sessions/:sessionId/messages`, () =>
       HttpResponse.json({
@@ -172,6 +171,11 @@ test("workspace actions copy Mac and matching GitHub PR links", async () => {
       }),
     ),
   );
+}
+
+test("workspace actions copy Mac and matching GitHub PR links", async () => {
+  writeCredential(TEST_API_KEY);
+  withPullRequest();
   const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   try {
     await renderApp("/workspaces/ws-ready");
@@ -188,6 +192,55 @@ test("workspace actions copy Mac and matching GitHub PR links", async () => {
     clipboard.mockRestore();
   }
 });
+
+test("merged PR appears between the project header and tabs and archives the project", async () => {
+  writeCredential(TEST_API_KEY);
+  withPullRequest();
+  let checks = 0;
+  let archives = 0;
+  worker.use(
+    http.get("https://api.github.com/repos/cortea/conductor/pulls/123", ({ request }) => {
+      checks++;
+      expect(request.headers.get("authorization")).toBeNull();
+      return HttpResponse.json({ merged: true });
+    }),
+    http.post(`${API_ORIGIN}/v0/workspaces/ws-ready/archive`, () => {
+      archives++;
+      return HttpResponse.json({ workspaceId: "ws-ready", status: "archived" });
+    }),
+  );
+  await renderApp("/workspaces/ws-ready");
+  const banner = page.getByRole("status", { name: "Pull request merged" });
+  await expect.element(banner).toBeVisible();
+  expect(checks).toBeGreaterThan(0);
+  expect(banner.element().previousElementSibling?.tagName).toBe("HEADER");
+  expect(banner.element().nextElementSibling?.querySelector('[role="tablist"]')).not.toBeNull();
+  expect(banner.element().classList.contains("text-purple-900")).toBe(true);
+  await userEvent.click(page.getByRole("button", { name: "Archive", exact: true }));
+  await expect.element(page.getByRole("main", { name: "Workspaces" })).toBeVisible();
+  expect(archives).toBe(1);
+});
+
+test.each([false, "unavailable"])(
+  "does not show merged banner for %s GitHub status",
+  async (merged) => {
+    writeCredential(TEST_API_KEY);
+    withPullRequest();
+    let checks = 0;
+    worker.use(
+      http.get("https://api.github.com/repos/cortea/conductor/pulls/123", () => {
+        checks++;
+        return merged === "unavailable"
+          ? HttpResponse.json({ message: "Not Found" }, { status: 404 })
+          : HttpResponse.json({ merged });
+      }),
+    );
+    await renderApp("/workspaces/ws-ready");
+    await expect.poll(() => checks).toBeGreaterThan(0);
+    expect(page.getByText("PR merged", { exact: true }).query()).toBeNull();
+    await expect.element(page.getByLabelText("Message")).toBeVisible();
+  },
+);
 
 test("a workspace without chats keeps new chat available", async () => {
   writeCredential(TEST_API_KEY);

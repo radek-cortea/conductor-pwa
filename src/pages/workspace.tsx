@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { applyAgentChange } from "@/lib/agent-picker";
 import { AgentFields } from "@/pages/agent-fields";
 import { ListSkeleton } from "@/pages/skeletons";
+import { MergedPr } from "@/pages/merged-pr";
 import { Button } from "@/ui/button";
 import {
   Dialog,
@@ -244,6 +245,13 @@ export function WorkspacePage() {
           </DropdownMenu>
         </div>
       </header>
+      <MergedPr
+        key={workspaceId}
+        link={prLink}
+        archived={phase === "archived"}
+        pending={archive.isPending}
+        onArchive={() => archive.mutate()}
+      />
       <div className="flex shrink-0 items-center border-b px-4">
         <div role="tablist" aria-label="Chats" className="flex min-w-0 gap-1 overflow-x-auto">
           {visibleSessions.map((session) => (

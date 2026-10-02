@@ -48,7 +48,7 @@ export default defineConfig({
             attrs: {
               "http-equiv": "Content-Security-Policy",
               content:
-                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.conductor.build; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.conductor.build https://api.github.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
             },
             injectTo: "head-prepend",
           },
@@ -108,7 +108,7 @@ export default defineConfig({
           "example.svg",
         ],
         runtimeCaching: (["GET", "HEAD", "POST"] as const).map((method) => ({
-          urlPattern: /^https:\/\/api\.conductor\.build\/.*/i,
+          urlPattern: /^https:\/\/(?:api\.conductor\.build|api\.github\.com)\/.*/i,
           handler: "NetworkOnly" as const,
           method,
         })),

@@ -6,7 +6,7 @@ Reviewed Git history, tracked files (including historical test screenshots), the
 
 - Gitleaks 8.30.1 (release SHA-256 verified) found no credentials in Git history or the production bundle. Manual inspection found synthetic test data, not real message transcripts or keys. Generated failure screenshots are excluded from new commits. Public history retains ordinary commit author identity and synthetic test fixtures.
 - `pnpm audit` and production-only dependency audits reported no known vulnerabilities at review time. This is not a guarantee against undisclosed vulnerabilities.
-- Credentials go only in the Authorization header to `https://api.conductor.build`. The transport rejects redirects and other origins, omits cookies/referrers, and disables HTTP caching. Known credential echoes are redacted from API errors. A stale 401 cannot invalidate a replacement credential.
+- Credentials go only in the Authorization header to `https://api.conductor.build`. The Conductor transport rejects redirects and other origins, omits cookies/referrers, and disables HTTP caching. Known credential echoes are redacted from API errors. A stale 401 cannot invalidate a replacement credential.
 - Production HTML has a restrictive meta CSP (self-hosted scripts, no inline scripts/eval, restricted connections, no objects/base tags/native form submissions) and a no-referrer policy. Inline styles remain allowed because UI positioning depends on them. Production startup refuses framing before reading credentials or fetching private data; meta CSP cannot supply `frame-ancestors` on GitHub Pages.
 - Markdown is sanitized and element/URL constrained. Script/frame/form content cannot execute, and remote images are replaced with inert placeholders rather than loaded. Web and Mac action URLs are validated. Diagnostics redact unknown object keys as well as private scalar values.
 - Only successful transcript/read-position queries are persisted in IndexedDB, in credential-hashed namespaces. Identity, auth headers and mutations are excluded. Logout removes the active transcript cache and cancels pending writes; staged hydration prevents stale restoration after logout/account changes.
@@ -17,6 +17,13 @@ Reviewed Git history, tracked files (including historical test screenshots), the
 - Unit and phone/desktop browser regressions cover hostile Markdown, URL validation, request transport settings, error redaction, stale/current 401 behavior, diagnostics, account isolation and logout races.
 - `scripts/security-smoke.mjs` exercises the production Pages build: login/navigation/refresh with mocked API responses, active service-worker scope, blocked inline-script injection and off-origin fetch, and blocked framed startup before API access.
 - Authenticated real-Conductor behavior is not certified by mocked responses; backend authorization remains authoritative. The frontend is a public static client, not an access-control boundary.
+
+## GitHub PR status checks
+
+- While a project is open, a repository-matching PR link discovered in fetched chat/tool data is checked on open, every minute while visible, and on returning to the app. The merged banner archives only when the user presses **Archive**.
+- Requests use a separate anonymous transport to fixed `https://api.github.com/repos/{owner}/{repo}/pulls/{number}` URLs: no Conductor key, cookies or referrer, no HTTP caching, no redirects, and a ten-second timeout. CSP permits this API origin; the service worker uses NetworkOnly. Status queries are not persisted.
+- GitHub sees the repository/PR identifiers and the device's IP. Private repositories and anonymous rate limits can make status unavailable; these errors never imply a PR is merged. Authenticated private-repository support requires a backend integration, not forwarding a Conductor credential.
+- Synthetic unit/browser regressions cover transport isolation, unavailable/malformed responses, minute polling, unmount/reopen, project isolation, banner placement and archiving. Production smoke verifies the banner and archive path with mocked APIs and an active service worker; it is not authenticated live GitHub/Conductor verification.
 
 ## Residual risks and operational requirements
 

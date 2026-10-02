@@ -129,6 +129,9 @@ function workspaceFor(id: string) {
 }
 
 export const handlers = [
+  http.get("https://api.github.com/repos/:owner/:repo/pulls/:number", () =>
+    HttpResponse.json({ merged: false }),
+  ),
   http.get(`${API_ORIGIN}/me`, async ({ request }) => {
     remember(request, undefined);
     if (!accepted(request)) return unauthorized();
