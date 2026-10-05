@@ -14,13 +14,8 @@ import { ApiError } from "@/api/errors";
 import { readCredential } from "@/auth/credential";
 import type { SessionPhase, SessionStatus } from "@/api/types";
 import { queryClient } from "@/query-client";
-import {
-  loadTranscript,
-  mergePolledMessages,
-  messagesKey,
-  readPositionKey,
-} from "@/transcript/load";
-import type { MessagesState, ReadPosition } from "@/transcript/types";
+import { loadTranscript, mergePolledMessages, messagesKey } from "@/transcript/load";
+import type { MessagesState } from "@/transcript/types";
 import { CHAT_CACHE_MAX_AGE } from "@/storage/query-persistence";
 
 export const HOME_STALE_MS = 60_000;
@@ -130,8 +125,7 @@ export function messagesQuery(sessionId: string) {
     gcTime: CHAT_CACHE_MAX_AGE,
     queryFn: async ({ signal, client }) => {
       const cached = client.getQueryData<MessagesState>(messagesKey(sessionId));
-      const read = client.getQueryData<ReadPosition>(readPositionKey(sessionId));
-      const incoming = await loadTranscript(sessionId, signal, cached, read);
+      const incoming = await loadTranscript(sessionId, signal, cached);
       return mergePolledMessages(
         client.getQueryData<MessagesState>(messagesKey(sessionId)),
         incoming,

@@ -3,7 +3,7 @@ import { readCredential } from "@/auth/credential";
 import { AuthenticatedLayout } from "@/pages/authenticated-layout";
 import { loadAccount } from "@/pages/loaders";
 import { RouteError } from "@/pages/route-error";
-import { ListSkeleton } from "@/pages/skeletons";
+import { AuthenticatedPending } from "@/pages/authenticated-pending";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
@@ -14,6 +14,6 @@ export const Route = createFileRoute("/_authenticated")({
   component: AuthenticatedLayout,
   loader: (args) => loadAccount(args),
   errorComponent: RouteError,
-  pendingComponent: ListSkeleton,
+  pendingComponent: AuthenticatedPending,
   head: () => ({ meta: [{ title: "Conductor PWA" }] }),
 });

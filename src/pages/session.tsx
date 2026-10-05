@@ -9,11 +9,11 @@ import { messagesQuery, sessionStatusQuery } from "@/api/queries";
 import { copyText } from "@/lib/copy";
 import { sessionStatusLabel } from "@/lib/labels";
 import { TranscriptSkeleton } from "@/pages/skeletons";
-import { loadHistory, markRead, type HistoryDirection } from "@/transcript/load";
+import { loadHistory, type HistoryDirection } from "@/transcript/load";
 import { TranscriptView, type VisibleEntry } from "@/transcript/transcript-view";
 import { turnPhase } from "@/transcript/turn-phase";
 import { promptConfirmed, promptDelivery } from "@/transcript/delivery";
-import type { ReadPosition, TranscriptEntry } from "@/transcript/types";
+import type { TranscriptEntry } from "@/transcript/types";
 import { Button } from "@/ui/button";
 import { Textarea } from "@/ui/textarea";
 
@@ -118,10 +118,6 @@ function SessionChat({ sessionId }: { sessionId: string }) {
       }
     },
     [loadMore],
-  );
-  const onRead = useCallback(
-    (position: ReadPosition) => markRead(queryClient, sessionId, position),
-    [queryClient, sessionId],
   );
 
   const send = useMutation({
@@ -249,7 +245,6 @@ function SessionChat({ sessionId }: { sessionId: string }) {
         entries={visible}
         state={messages.data}
         onLoad={onLoad}
-        onRead={onRead}
         loadingHistory={history.isPending}
         historyFailed={history.isError}
         finalMessageId={

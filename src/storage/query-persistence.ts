@@ -82,8 +82,8 @@ export function createIDBPersister(key: string) {
 export function shouldPersistChat(query: Query): boolean {
   return (
     query.state.status === "success" &&
-    (query.queryKey[0] === "chat-read" ||
-      (query.queryKey[0] === "sessions" && query.queryKey[2] === "messages"))
+    query.queryKey[0] === "sessions" &&
+    query.queryKey[2] === "messages"
   );
 }
 const dehydrateOptions = {

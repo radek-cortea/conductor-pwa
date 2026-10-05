@@ -6,13 +6,11 @@ import { assistantFixture, unknownFixture } from "@/transcript/fixtures";
 import {
   loadHistory,
   loadTranscript,
-  markRead,
   mergePolledMessages,
   MESSAGE_PAGE_SIZE,
   messagesKey,
-  readPositionKey,
 } from "@/transcript/load";
-import type { MessagesState, ReadPosition } from "@/transcript/types";
+import type { MessagesState } from "@/transcript/types";
 
 vi.mock("@/api/fetch", () => ({ fetchMessagePage: vi.fn() }));
 beforeEach(() => {
@@ -62,28 +60,12 @@ describe("viewport transcript windows", () => {
     expect(calls.reduce((sum, call) => sum + call[1].limit, 0)).toBeLessThan(100);
   });
 
-  it("starts at the first unread event, rather than skipping to the end", async () => {
+  it("starts at the latest window without read/unread state", async () => {
     serve(events(100));
-    const state = await loadTranscript("ses-1", signal(), undefined, {
-      messageId: "event-30",
-      sessionIndex: 30,
-      offset: 30,
-    });
-    expect(state.initialPosition).toBe("unread");
-    expect(state.startOffset).toBe(31);
-    expect(state.entries[0]).toMatchObject({ text: "Answer 31." });
-    expect(state.endOffset).toBe(31 + MESSAGE_PAGE_SIZE);
-  });
-
-  it("starts at the latest window when everything has been read", async () => {
-    serve(events(100));
-    const state = await loadTranscript("ses-1", signal(), undefined, {
-      messageId: "event-99",
-      sessionIndex: 99,
-      offset: 99,
-    });
-    expect(state.initialPosition).toBe("latest");
+    const state = await loadTranscript("ses-1", signal());
     expect(state.startOffset).toBe(100 - MESSAGE_PAGE_SIZE);
+    expect(state.entries.at(-1)).toMatchObject({ text: "Answer 99." });
+    expect(state).not.toHaveProperty("unreadOffset");
   });
 
   it("polls after the tail cursor and preserves fetched history", async () => {
@@ -147,42 +129,35 @@ describe("viewport transcript windows", () => {
     client.clear();
   });
 
-  it("fills forward from unread history without losing the first unread position", async () => {
+  it("fills forward from an older history window without losing its start", async () => {
     serve(events(100));
     const client = createQueryClient();
-    const state = await loadTranscript("ses-1", signal(), undefined, {
-      messageId: "event-30",
-      sessionIndex: 30,
-      offset: 30,
-    });
-    client.setQueryData(messagesKey("ses-1"), state);
+    const state = await loadTranscript("ses-1", signal());
+    client.setQueryData(messagesKey("ses-1"), { ...state, startOffset: 31, endOffset: 47 });
     await loadHistory(client, "ses-1", "newer", signal());
     const next = client.getQueryData<MessagesState>(messagesKey("ses-1"))!;
     expect(next.startOffset).toBe(31);
     expect(next.endOffset).toBe(31 + 2 * MESSAGE_PAGE_SIZE);
-    expect(next.unreadOffset).toBe(31);
     client.clear();
   });
 
-  it("reopens persisted history at the last unread position or the latest screen", async () => {
+  it("reopens persisted older history at the latest window, ignoring legacy read cursors", async () => {
     serve(events(100));
     const client = createQueryClient();
-    client.setQueryData(messagesKey("ses-1"), await loadTranscript("ses-1", signal()));
-    markRead(client, "ses-1", { messageId: "event-20", sessionIndex: 20, offset: 20 });
+    const state = await loadTranscript("ses-1", signal());
+    client.setQueryData(messagesKey("ses-1"), {
+      ...state,
+      startOffset: 20,
+      endOffset: 36,
+      initialPosition: "unread",
+      unreadOffset: 21,
+    });
+    client.setQueryData(["chat-read", "ses-1"], { messageId: "event-20", offset: 20 });
     await loadHistory(client, "ses-1", "initial", signal());
-    expect(client.getQueryData<MessagesState>(messagesKey("ses-1"))?.startOffset).toBe(21);
-    markRead(client, "ses-1", { messageId: "event-99", sessionIndex: 99, offset: 99 });
-    await loadHistory(client, "ses-1", "initial", signal());
-    expect(client.getQueryData<MessagesState>(messagesKey("ses-1"))?.startOffset).toBe(84);
-    client.clear();
-  });
-
-  it("never moves a read cursor backwards when scrolling into old messages", () => {
-    const client = createQueryClient();
-    const last = { messageId: "event-99", sessionIndex: 99, offset: 99 };
-    markRead(client, "ses-1", last);
-    markRead(client, "ses-1", { messageId: "event-10", sessionIndex: 10, offset: 10 });
-    expect(client.getQueryData<ReadPosition>(readPositionKey("ses-1"))).toEqual(last);
+    const reopened = client.getQueryData<MessagesState>(messagesKey("ses-1"));
+    expect(reopened?.startOffset).toBe(84);
+    expect(reopened).not.toHaveProperty("unreadOffset");
+    expect(reopened).not.toHaveProperty("initialPosition");
     client.clear();
   });
 

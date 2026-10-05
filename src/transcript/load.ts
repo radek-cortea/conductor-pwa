@@ -2,12 +2,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import { fetchMessagePage } from "@/api/fetch";
 import type { TranscriptMessage, TranscriptPage } from "@/api/types";
 import { normaliseMessages, unsupportedMessageFormats } from "@/transcript/normalise";
-import type { MessagesState, ReadPosition } from "@/transcript/types";
+import type { MessagesState } from "@/transcript/types";
 
 // Small windows; the viewport asks for more only when needed.
 export const MESSAGE_PAGE_SIZE = 16;
 export const messagesKey = (sessionId: string) => ["sessions", sessionId, "messages"] as const;
-export const readPositionKey = (sessionId: string) => ["chat-read", sessionId] as const;
 export type HistoryDirection = "older" | "newer" | "latest" | "initial";
 
 function putPage(byOffset: MessagesState["byOffset"], page: TranscriptPage, offset: number) {
@@ -30,13 +29,18 @@ export function projectMessages(state: MessagesState): MessagesState {
     ...entry,
     offset: offsets.get(entry.messageId),
   }));
-  const noUnreadContent =
-    state.initialPosition === "unread" && state.endOffset >= state.total && entries.length === 0;
+  // Project only current transcript fields, dropping legacy unread-position data
+  // from older persisted snapshots without discarding their message cache.
   return {
-    ...state,
+    byOffset: state.byOffset,
     entries,
+    startOffset: state.startOffset,
+    endOffset: state.endOffset,
+    total: state.total,
+    tailId: state.tailId,
+    pollHasMore: state.pollHasMore,
+    viewId: state.viewId,
     unsupportedFormats: unsupportedMessageFormats(messages),
-    ...(noUnreadContent ? ({ initialPosition: "latest", unreadOffset: null } as const) : {}),
   };
 }
 
@@ -83,7 +87,6 @@ export async function loadTranscript(
   sessionId: string,
   signal: AbortSignal,
   cached?: MessagesState,
-  read?: ReadPosition,
 ): Promise<MessagesState> {
   if (cached?.byOffset && cached.tailId && Number.isFinite(cached.total)) {
     const page = await fetchMessagePage(
@@ -114,8 +117,7 @@ export async function loadTranscript(
   const first = await fetchMessagePage(sessionId, { limit: MESSAGE_PAGE_SIZE, offset: 0 }, signal);
   putPage(byOffset, first, 0);
   const total = await findTotal(sessionId, signal, byOffset, first);
-  const unread = read && read.offset >= 0 && read.offset < total - 1 ? read.offset + 1 : null;
-  const startOffset = unread ?? Math.max(0, total - MESSAGE_PAGE_SIZE);
+  const startOffset = Math.max(0, total - MESSAGE_PAGE_SIZE);
   const endOffset = Math.min(total, startOffset + MESSAGE_PAGE_SIZE);
   if (!cachedWindow({ byOffset }, startOffset, endOffset)) {
     putPage(
@@ -137,8 +139,6 @@ export async function loadTranscript(
     tailId: byOffset[total - 1]?.id ?? null,
     pollHasMore: false,
     viewId: crypto.randomUUID(),
-    initialPosition: unread === null ? "latest" : "unread",
-    unreadOffset: unread,
     unsupportedFormats: [],
   });
 }
@@ -174,17 +174,12 @@ export async function loadHistory(
   const key = messagesKey(sessionId);
   const snapshot = client.getQueryData<MessagesState>(key);
   if (!snapshot?.byOffset || !Number.isFinite(snapshot.total)) return;
-  const read = client.getQueryData<ReadPosition>(readPositionKey(sessionId));
-  const unread =
-    direction === "initial" && read && read.offset >= 0 && read.offset < snapshot.total - 1
-      ? read.offset + 1
-      : null;
   const start =
     direction === "older"
       ? Math.max(0, snapshot.startOffset - MESSAGE_PAGE_SIZE)
       : direction === "newer"
         ? snapshot.endOffset
-        : (unread ?? Math.max(0, snapshot.total - MESSAGE_PAGE_SIZE));
+        : Math.max(0, snapshot.total - MESSAGE_PAGE_SIZE);
   const end =
     direction === "older"
       ? snapshot.startOffset
@@ -218,19 +213,7 @@ export async function loadHistory(
           : Math.min(start, current.startOffset),
       endOffset:
         direction === "latest" || direction === "initial" ? end : Math.max(end, current.endOffset),
-      ...(direction === "latest" || direction === "initial"
-        ? ({
-            viewId: crypto.randomUUID(),
-            initialPosition: unread === null ? "latest" : "unread",
-            unreadOffset: unread,
-          } as const)
-        : {}),
+      ...(direction === "latest" || direction === "initial" ? { viewId: crypto.randomUUID() } : {}),
     });
   });
-}
-
-export function markRead(client: QueryClient, sessionId: string, position: ReadPosition): void {
-  client.setQueryData<ReadPosition>(readPositionKey(sessionId), (previous) =>
-    !previous || position.offset > previous.offset ? position : previous,
-  );
 }

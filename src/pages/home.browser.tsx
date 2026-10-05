@@ -33,6 +33,10 @@ test("home has compact controls and an ungrouped, borderless workspace list", as
   expect(new Set(controls.map((rect) => rect.top)).size).toBe(1);
   expect(controls.at(-1)?.right).toBeLessThanOrEqual(window.innerWidth);
   expect(page.getByText("Old migration").query()).toBeNull();
+  expect(page.getByRole("img", { name: "Unread messages" }).query()).toBeNull();
+  expect(page.getByRole("img", { name: "PR merged" }).query()).toBeNull();
+  expect(requestsTo("GET", "/v0/workspaces/ws-ready/sessions")).toHaveLength(0);
+  expect(requestsTo("GET", "/v0/sessions/ses-live/messages")).toHaveLength(0);
   expect(page.getByText("Grace's workspace").query()).toBeNull();
   expect(
     page

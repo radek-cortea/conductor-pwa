@@ -24,8 +24,6 @@ export type TranscriptEntry = {
   | { kind: "unknown" }
 );
 
-export type ReadPosition = { messageId: string; sessionIndex: number; offset: number };
-
 export type MessagesState = {
   // Sparse, durable cache of fetched events, indexed by their API offset.
   byOffset: Record<number, TranscriptMessage>;
@@ -36,7 +34,5 @@ export type MessagesState = {
   tailId: string | null;
   pollHasMore: boolean;
   viewId: string;
-  initialPosition: "unread" | "latest";
-  unreadOffset: number | null;
   unsupportedFormats: string[];
 };

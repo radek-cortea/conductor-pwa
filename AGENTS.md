@@ -24,7 +24,7 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 ```
 
 - Production smoke needs Playwright Chromium (`pnpm exec playwright install chromium`; CI installs browser dependencies too).
-- Last complete suite: **223 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
+- Last complete suite: **193 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
 - Intentional malformed-message-page tests emit React route errors; these are expected negative cases, not happy-path success evidence.
 - Existing non-blocking build warnings: router `replaceRouteChunk` circular dependency and large JS chunks.
 - For publishing, inspect Git history and the final packaged bundle with a trusted secret scanner (e.g. `gitleaks git . --redact`, `gitleaks dir dist --redact`). Never print detected secret values.
@@ -34,9 +34,10 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 - List **only the current user's workspaces** using the API `creator` filter from `/me.userId`, including archived pagination.
 - Home: compact borderless workspace rows, no repository/org labels or redundant headings. Full viewport flex column; **only the list scrolls**. Search, **Create** (no plus icon), and archive toggle stay at the bottom.
 - Home header: small organization label and email-triggered account menu with Sign out. No app logo/name in the authenticated header.
-- Reserve **purple** for a confirmed merged PR: the workspace banner and a main-list merge icon. Main-list PR detection uses only repository-matching links in already-cached non-archived chat transcripts, then checks GitHub while the row is visible. Do not download/seek chat histories to find PRs, invent links, or share a project's marker with another workspace just because their repositories match.
-- Home unread dots are **blue** and use this PWA's read cursors across all non-archived chats. This is local to the browser, not API/Mac read-status sync; never-opened chats with conversation content count as unread. `src/transcript/unread.ts` runs short-lived, non-persisted background checks for visible/near-visible rows, with a shared three-request limiter and 64-event scan budget. Check after the read message ID; never tail-seek or block the list. Refresh on activity change, every minute, and on resume/focus. Unknown/failed checks are not read; opening a project alone must not clear unread.
+- **No unread functionality:** the API has no read/unread state. Do not reintroduce local unread dots, read cursors, first-unread opening or background list transcript checks. Chats open at the latest messages.
+- List PR chips may show green **PR open** / purple **PR merged** only if the workspace API supplies documented PR status. The current public spec supplies none; do not infer main-list status from cached chat links or fetch conversations to decorate rows. Preserve the existing in-project purple merged banner using a real repository-matching chat PR link and the separate anonymous GitHub check.
 - Inside a workspace (the user also calls this a project): **one** top header with back icon, workspace name and three-dot actions. No account bar or duplicate name/actions row. Preview is in the actions menu.
+- Keep that header visible during account/detail/session/transcript loading. `beforeLoad` carries known workspace metadata from QueryClient through router context; the pending header observes real detail updates without seeding list data as fresh detail data. Unknown deep links show a name placeholder and working back button. Keep loader cancellation recovery and pending thresholds unchanged.
 - Chats are tabs with colored status dots; no duplicate chat heading. Remember last-selected chat. New-chat plus beside tabs; archived-chat control in tab menu.
 - Chat composer is fixed-height, one row (40px at default root size), with 28px send/cancel buttons **inside** it. Enter sends; Shift+Enter remains supported within the fixed-height textarea. Composer must stay visible.
 - System instructions, thinking and tools collapse by default; expanded bodies render lazily. Tool names/inputs/outputs/exit codes are inspectable when provided by the API.
@@ -49,10 +50,9 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 ## History and persistence architecture
 
 - `src/transcript/load.ts` uses sparse offset windows, **16-event pages**, and exponential/binary one-event probes to find the tail. The public API has ascending offset/after pagination but no tail/count/unread endpoint.
-- Open at first locally unread message, otherwise latest. Automatically fill empty viewport space and fetch at scroll boundaries; **no Load more button** and no old 200-entry truncation cap.
-- Read positions belong to this PWA, not the Mac app. Preserve monotonic cursors, prepend scroll anchoring, touch/wheel/keyboard boundaries, and concurrent polling/history changes.
+- Open at the latest messages. Automatically fill empty viewport space and fetch at scroll boundaries; **no Load more button** and no old 200-entry truncation cap. Preserve prepend scroll anchoring, touch/wheel/keyboard boundaries, and concurrent polling/history changes.
 - `src/storage/query-persistence.ts` uses official TanStack persistence APIs and IndexedDB (`idb-keyval`), seven-day expiry/GC, credential-hashed namespaces, ordered/coalesced writes, and staged hydration.
-- Persist only successful transcript/read-position queries. **Never persist identity, auth headers or mutations.** Logout removes the active account's chat cache and cancels writes. Late restoration must not undo logout or hydrate another account.
+- Persist only successful transcript queries; legacy read-position queries are excluded on restoration. **Never persist identity, auth headers or mutations.** Logout removes the active account's chat cache and cancels writes. Late restoration must not undo logout or hydrate another account.
 - This is transcript persistence, **not full offline navigation**.
 
 ## Critical regression: real lifecycle, not just payloads

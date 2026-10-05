@@ -34,7 +34,10 @@ try {
     const errors = [];
     const requests = [];
     let githubChecks = 0;
-    const unreadProbes = [];
+    let releaseWorkspaceLoads;
+    const workspaceLoads = new Promise((resolve) => {
+      releaseWorkspaceLoads = resolve;
+    });
     await context.route("https://api.github.com/**", async (route) => {
       assert.equal(new URL(route.request().url()).pathname, "/repos/cortea/conductor/pulls/123");
       assert.equal(route.request().headers().authorization, undefined);
@@ -62,9 +65,6 @@ try {
       const messageOffset = requestUrl.searchParams.has("after")
         ? 1
         : Number(requestUrl.searchParams.get("offset") ?? 0);
-      if (path.endsWith("/messages") && requestUrl.searchParams.get("limit") === "1") {
-        unreadProbes.push(requestUrl.searchParams.get("after"));
-      }
       requests.push(path);
       const data = {
         "/me": { userId: "security-user", email: "smoke@example.test", authMethod: "api-key" },
@@ -109,6 +109,9 @@ try {
         },
       };
       assert(path in data, path);
+      if (path === "/v0/workspaces/workspace" || path === "/v0/workspaces/workspace/sessions") {
+        await workspaceLoads;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -136,10 +139,15 @@ try {
     await page.getByLabel("API key", { exact: true }).fill("production-security-smoke-key");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByRole("main", { name: "Workspaces", exact: true }).waitFor();
-    const unreadDot = page.getByRole("img", { name: "Unread messages", exact: true });
-    await unreadDot.waitFor();
-    assert((await unreadDot.getAttribute("class")).includes("bg-blue-600"));
+    assert.equal(await page.getByRole("img", { name: "Unread messages", exact: true }).count(), 0);
+    assert(!requests.some((path) => path.endsWith("/sessions") || path.endsWith("/messages")));
+    assert.equal(githubChecks, 0);
     await page.getByRole("link", { name: /Smoke project/ }).click();
+    await page.getByRole("heading", { name: "Smoke project", exact: true }).waitFor();
+    await page.getByRole("link", { name: "Workspaces", exact: true }).waitFor();
+    assert.equal(await page.locator("header").count(), 1);
+    assert.equal(await page.getByRole("button", { name: "smoke@example.test" }).count(), 0);
+    releaseWorkspaceLoads();
     await page.getByRole("status", { name: "Pull request merged" }).waitFor();
     await page.waitForFunction(async () =>
       Boolean((await navigator.serviceWorker.getRegistration())?.active),
@@ -149,17 +157,8 @@ try {
     assert(githubChecks > 0);
     await page.getByRole("link", { name: "Workspaces", exact: true }).click();
     await page.getByRole("main", { name: "Workspaces", exact: true }).waitFor();
-    await page.waitForFunction(() => !document.querySelector('[aria-label="Unread messages"]'));
-    for (let attempt = 0; attempt < 50 && !unreadProbes.includes("pr-message"); attempt++) {
-      await page.waitForTimeout(100);
-    }
-    assert(unreadProbes.includes("pr-message"), "Home must check after the locally read message");
-    const mergedPrIcon = page.getByRole("img", { name: "PR merged", exact: true });
-    await mergedPrIcon.waitFor();
-    assert((await mergedPrIcon.getAttribute("class")).includes("text-purple-900"));
-    await page
-      .getByRole("img", { name: "Unread messages", exact: true })
-      .waitFor({ state: "detached" });
+    assert.equal(await page.getByRole("img", { name: "Unread messages", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("img", { name: "PR merged", exact: true }).count(), 0);
     await page.getByRole("link", { name: /Smoke project/ }).click();
     await page.getByRole("status", { name: "Pull request merged" }).waitFor();
     await page.getByRole("button", { name: "Archive", exact: true }).click();
@@ -208,8 +207,8 @@ try {
         viewport,
         navigationAndReload: true,
         anonymousGithubMergedBannerAndArchive: true,
-        unreadProjectDotsAndReadCursors: true,
-        purpleMainListMergedPrIconAndBlueUnreadDot: true,
+        pendingProjectHeaderFromContext: true,
+        noUnreadOrListTranscriptChecks: true,
         normalConsoleErrors: 0,
         cspBlocksInlineScript: true,
         cspBlocksExfiltration: true,

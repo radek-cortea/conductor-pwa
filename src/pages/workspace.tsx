@@ -1,13 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, getRouteApi, useParams } from "@tanstack/react-router";
-import {
-  ChevronLeft,
-  Copy,
-  ExternalLink,
-  GitPullRequest,
-  MoreHorizontal,
-  Plus,
-} from "lucide-react";
+import { Copy, ExternalLink, GitPullRequest, MoreHorizontal, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiError } from "@/api/errors";
@@ -36,7 +29,8 @@ import { sessionStatusLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { applyAgentChange } from "@/lib/agent-picker";
 import { AgentFields } from "@/pages/agent-fields";
-import { ListSkeleton } from "@/pages/skeletons";
+import { TranscriptSkeleton } from "@/pages/skeletons";
+import { WorkspaceHeader } from "@/pages/workspace-header";
 import { MergedPr } from "@/pages/merged-pr";
 import { Button } from "@/ui/button";
 import {
@@ -148,7 +142,15 @@ export function WorkspacePage() {
     },
   });
 
-  if (workspace.isPending || sessions.isPending) return <ListSkeleton />;
+  const { workspacePreview } = workspaceRoute.useRouteContext();
+  if (workspace.isPending || sessions.isPending) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <WorkspaceHeader name={workspace.data?.name ?? workspacePreview?.name} />
+        <TranscriptSkeleton />
+      </div>
+    );
+  }
   if (!workspace.data) return null;
 
   const phase = status.data?.status ?? workspace.data.state;
@@ -160,20 +162,7 @@ export function WorkspacePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="z-20 flex shrink-0 items-center gap-2 border-b bg-background px-4 pt-[max(0.25rem,env(safe-area-inset-top))] pb-1">
-        <Button asChild variant="ghost" size="icon" className="shrink-0">
-          <Link
-            to="/workspaces"
-            search={{ archived: false, q: "" }}
-            aria-label="Workspaces"
-            title="Back to workspaces"
-          >
-            <ChevronLeft aria-hidden="true" />
-          </Link>
-        </Button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold" title={workspace.data.name}>
-          {workspace.data.name}
-        </h1>
+      <WorkspaceHeader name={workspace.data.name}>
         <div className="ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -244,7 +233,7 @@ export function WorkspacePage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </header>
+      </WorkspaceHeader>
       <MergedPr
         key={workspaceId}
         link={prLink}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { splitSystemInstructions } from "@/transcript/content";
 import type { DeliveryState } from "@/transcript/delivery";
 import type { HistoryDirection } from "@/transcript/load";
-import type { MessagesState, ReadPosition, TranscriptEntry } from "@/transcript/types";
+import type { MessagesState, TranscriptEntry } from "@/transcript/types";
 import { MessageMarkdown } from "@/transcript/message-markdown";
 import { Button } from "@/ui/button";
 
@@ -14,7 +14,6 @@ type Props = {
   historyFailed: boolean;
   finalMessageId?: string;
   onLoad: (direction: HistoryDirection) => Promise<boolean>;
-  onRead: (position: ReadPosition) => void;
 };
 type Anchor = { id: string; top: number; keepBottom: boolean };
 
@@ -52,31 +51,6 @@ export function TranscriptView(props: Props) {
       : null;
   }, []);
 
-  const measureRead = useCallback(() => {
-    const viewport = scroll.current;
-    if (!viewport || document.visibilityState !== "visible") return;
-    const { entries, state, onRead } = latest.current;
-    const bounds = viewport.getBoundingClientRect();
-    const visible = new Set(
-      Array.from(viewport.querySelectorAll<HTMLElement>("[data-entry-id]"))
-        .filter((node) => {
-          const rect = node.getBoundingClientRect();
-          return rect.bottom <= bounds.bottom + 1 && rect.bottom > bounds.top;
-        })
-        .map((node) => node.dataset.entryId),
-    );
-    const read = entries
-      .filter((entry) => entry.offset !== undefined && visible.has(entry.id))
-      .at(-1);
-    if (read && read.offset !== undefined)
-      onRead({ messageId: read.messageId, sessionIndex: read.sessionIndex, offset: read.offset });
-    if (read && atBottom.current && state.endOffset >= state.total) {
-      const tail = state.byOffset[state.total - 1];
-      if (tail)
-        onRead({ messageId: tail.id, sessionIndex: tail.sessionIndex, offset: state.total - 1 });
-    }
-  }, []);
-
   const request = useCallback(
     async (direction: HistoryDirection) => {
       const current = latest.current;
@@ -112,15 +86,14 @@ export function TranscriptView(props: Props) {
     setShowLatest(!atBottom.current || latest.current.state.endOffset < latest.current.state.total);
     previousTop.current = viewport.scrollTop;
     captureAnchor();
-    measureRead();
-  }, [captureAnchor, measureRead]);
+  }, [captureAnchor]);
 
   useLayoutEffect(() => {
     const viewport = scroll.current;
     if (!viewport) return;
     const old = previous.current;
     if (!old || old.viewId !== state.viewId) {
-      viewport.scrollTop = state.initialPosition === "unread" ? 0 : viewport.scrollHeight;
+      viewport.scrollTop = viewport.scrollHeight;
     } else if (state.startOffset < old.start) {
       const saved = anchor.current;
       if (saved?.keepBottom) viewport.scrollTop = viewport.scrollHeight;
@@ -160,12 +133,8 @@ export function TranscriptView(props: Props) {
     });
     if (scroll.current) observer.observe(scroll.current);
     if (content.current) observer.observe(content.current);
-    document.addEventListener("visibilitychange", measureRead);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", measureRead);
-    };
-  }, [updatePosition, fillViewport, measureRead]);
+    return () => observer.disconnect();
+  }, [updatePosition, fillViewport]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -212,7 +181,7 @@ export function TranscriptView(props: Props) {
           const delta = y - touchY.current;
           if (Math.abs(delta) < 8) return;
           touchY.current = y;
-          // At an unread boundary, touch intent may not produce a scroll event.
+          // At a history boundary, touch intent may not produce a scroll event.
           if (delta > 0 && viewport.scrollTop < 96) void request("older");
           else if (
             delta < 0 &&

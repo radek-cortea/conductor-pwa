@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createQueryClient } from "@/query-client";
 import { assistantFixture, userFixture } from "@/transcript/fixtures";
-import { messagesKey, readPositionKey } from "@/transcript/load";
+import { messagesKey } from "@/transcript/load";
 import { normaliseMessages } from "@/transcript/normalise";
 import type { MessagesState } from "@/transcript/types";
 import {
@@ -21,18 +21,16 @@ function state(): MessagesState {
     tailId: assistantFixture.id,
     pollHasMore: false,
     viewId: "test-window",
-    initialPosition: "latest",
-    unreadOffset: null,
     unsupportedFormats: [],
   };
 }
 
-test("IndexedDB restores messages and read positions, but not identity, credentials, or mutations", async () => {
+test("IndexedDB restores only transcripts, excluding legacy read positions, identity and credentials", async () => {
   const first = createQueryClient();
   await startMessagePersistence("persistence-owner-A", first);
   first.setQueryData(messagesKey("ses-1"), state());
   const cursor = { messageId: assistantFixture.id, sessionIndex: 1, offset: 1 };
-  first.setQueryData(readPositionKey("ses-1"), cursor);
+  first.setQueryData(["chat-read", "ses-1"], cursor);
   first.setQueryData(["me"], { apiKey: "must-not-be-persisted", email: "private@example.com" });
   first.setQueryData(["sessions", "ses-1", "status"], { status: "working" });
   first.setQueryData(["workspace-unread", "ws-1"], "unread");
@@ -45,7 +43,7 @@ test("IndexedDB restores messages and read positions, but not identity, credenti
   expect(reopened.getQueryData<MessagesState>(messagesKey("ses-1"))?.byOffset[1]).toEqual(
     assistantFixture,
   );
-  expect(reopened.getQueryData(readPositionKey("ses-1"))).toEqual(cursor);
+  expect(reopened.getQueryData(["chat-read", "ses-1"])).toBeUndefined();
   expect(reopened.getQueryData(["me"])).toBeUndefined();
   expect(reopened.getQueryData(["sessions", "ses-1", "status"])).toBeUndefined();
   expect(reopened.getQueryData(["workspace-unread", "ws-1"])).toBeUndefined();

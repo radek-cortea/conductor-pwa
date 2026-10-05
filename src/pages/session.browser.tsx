@@ -5,7 +5,7 @@ import { writeCredential } from "@/auth/credential";
 import { API_ORIGIN, requestsTo, TEST_API_KEY } from "@/test/handlers";
 import { worker } from "@/test/worker";
 import { assistantFixture, toolFixture, unknownFixture, userFixture } from "@/transcript/fixtures";
-import { markRead, messagesKey, MESSAGE_PAGE_SIZE } from "@/transcript/load";
+import { messagesKey, MESSAGE_PAGE_SIZE } from "@/transcript/load";
 import type { MessagesState } from "@/transcript/types";
 import type { TranscriptMessage } from "@/api/types";
 import { queryClient } from "@/query-client";
@@ -366,33 +366,24 @@ test("scrolling up loads older messages and preserves the visible row", async ()
     .toBe(152);
 });
 
-test("opening a chat begins at unread messages, not at the latest answer", async () => {
+test("opening a chat begins at the latest answer and ignores legacy read state", async () => {
   writeCredential(TEST_API_KEY);
   serveTranscript(answers(100));
-  markRead(queryClient, "ses-live", { messageId: "event-30", sessionIndex: 30, offset: 30 });
+  queryClient.setQueryData(["chat-read", "ses-live"], { messageId: "event-30", offset: 30 });
   await renderApp("/workspaces/ws-ready/sessions/ses-live");
-  await expect.element(page.getByText("Answer 31.")).toBeVisible();
+  await expect.element(page.getByText("Answer 99.")).toBeVisible();
   const state = queryClient.getQueryData<MessagesState>(messagesKey("ses-live"))!;
-  expect(state.initialPosition).toBe("unread");
-  expect(state.unreadOffset).toBe(31);
-  const viewport = page
-    .getByRole("log", { name: "Conversation" })
-    .element()
-    .getBoundingClientRect();
-  expect(page.getByText("Answer 31.").element().getBoundingClientRect().top).toBeLessThan(
-    viewport.top + 50,
-  );
-  expect(page.getByText("Answer 99.").query()).toBeNull();
+  expect(state.startOffset).toBe(84);
+  expect(page.getByText("Answer 31.").query()).toBeNull();
 });
 
-test("a touch swipe at the unread boundary loads older messages without requiring a scroll event", async () => {
+test("a touch swipe at a history boundary loads older messages without requiring a scroll event", async () => {
   writeCredential(TEST_API_KEY);
   serveTranscript(answers(100));
-  markRead(queryClient, "ses-live", { messageId: "event-30", sessionIndex: 30, offset: 30 });
   await renderApp("/workspaces/ws-ready/sessions/ses-live");
-  await expect.element(page.getByText("Answer 31.")).toBeVisible();
+  await expect.element(page.getByText("Answer 99.")).toBeVisible();
   const viewport = page.getByRole("log", { name: "Conversation" }).element();
-  expect(viewport.scrollTop).toBe(0);
+  viewport.scrollTop = 0;
   viewport.dispatchEvent(
     Object.assign(new Event("touchstart", { bubbles: true }), { touches: [{ clientY: 200 }] }),
   );
@@ -401,7 +392,7 @@ test("a touch swipe at the unread boundary loads older messages without requirin
   );
   await expect
     .poll(() => queryClient.getQueryData<MessagesState>(messagesKey("ses-live"))?.startOffset)
-    .toBe(15);
+    .toBe(68);
 });
 
 test("wrapped arrays and NDJSON payloads render rather than crashing the chat", async () => {
