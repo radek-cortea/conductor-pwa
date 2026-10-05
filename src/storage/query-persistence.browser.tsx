@@ -35,6 +35,8 @@ test("IndexedDB restores messages and read positions, but not identity, credenti
   first.setQueryData(readPositionKey("ses-1"), cursor);
   first.setQueryData(["me"], { apiKey: "must-not-be-persisted", email: "private@example.com" });
   first.setQueryData(["sessions", "ses-1", "status"], { status: "working" });
+  first.setQueryData(["workspace-unread", "ws-1"], "unread");
+  first.setQueryData(["workspace-unread-sessions", "ws-1"], [{ id: "ses-1" }]);
   await flushStoredMessages();
   await stopMessagePersistence(first, false);
 
@@ -46,6 +48,8 @@ test("IndexedDB restores messages and read positions, but not identity, credenti
   expect(reopened.getQueryData(readPositionKey("ses-1"))).toEqual(cursor);
   expect(reopened.getQueryData(["me"])).toBeUndefined();
   expect(reopened.getQueryData(["sessions", "ses-1", "status"])).toBeUndefined();
+  expect(reopened.getQueryData(["workspace-unread", "ws-1"])).toBeUndefined();
+  expect(reopened.getQueryData(["workspace-unread-sessions", "ws-1"])).toBeUndefined();
   await stopMessagePersistence(reopened);
 });
 

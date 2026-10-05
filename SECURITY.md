@@ -25,6 +25,13 @@ Reviewed Git history, tracked files (including historical test screenshots), the
 - GitHub sees the repository/PR identifiers and the device's IP. Private repositories and anonymous rate limits can make status unavailable; these errors never imply a PR is merged. Authenticated private-repository support requires a backend integration, not forwarding a Conductor credential.
 - Synthetic unit/browser regressions cover transport isolation, unavailable/malformed responses, minute polling, unmount/reopen, project isolation, banner placement and archiving. Production smoke verifies the banner and archive path with mocked APIs and an active service worker; it is not authenticated live GitHub/Conductor verification.
 
+## Unread project indicators
+
+- Home shows a dot when any non-archived chat has conversation content newer than this PWA's locally saved read cursor. Never-opened chats count as unread if they contain conversation content; empty chats and protocol-only activity do not. Opening a project does not mark it read: existing viewport-based, monotonic cursors remain authoritative.
+- Checks start only for visible/near-visible rows while the document is visible. A shared three-request limiter bounds background API traffic. Checks start with `after=<read message id>&limit=1` (or offset zero for new chats), skip protocol noise in small pages, and stop at 64 events rather than downloading whole histories. Incomplete scans and unavailable chats are unknown, not read. The main list never waits for these checks.
+- Checks refresh on activity changes, every minute while mounted, and on resume/focus. They use the existing fixed-origin Conductor transport and abort on unmount/logout. Discovery/results are short-lived memory-only queries; only existing transcript/read-position queries are persisted in credential-isolated IndexedDB. No new identity or credential persistence is introduced.
+- Synthetic phone/desktop regressions cover local read cursors, multiple chats, archived chats, slow/unavailable checks, visibility/resume, bounded/lazy traffic, minute polling, actual viewing and logout/late-response isolation. Packaged production smoke covers unread dots and read-cursor checks with mocked APIs and an active service worker, not authenticated live API behavior.
+
 ## Residual risks and operational requirements
 
 - Remembered API keys in localStorage and transcripts in IndexedDB are **not encrypted at rest**. Users requested this persistence. Only use a trusted device/browser; **Forget saved key** removes the saved credential, and sign-out removes the active chat cache. Browser extensions, local device access or compromised same-origin scripts can read browser storage.

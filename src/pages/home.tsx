@@ -10,6 +10,8 @@ import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { ListSkeleton } from "@/pages/skeletons";
+import { WorkspaceUnread } from "@/pages/workspace-unread";
+import { useDocumentVisible, useRowVisible } from "@/lib/visibility";
 
 const homeRoute = getRouteApi("/_authenticated/workspaces/");
 
@@ -19,6 +21,7 @@ export function HomePage() {
   const projects = useQuery(projectsQuery());
   const workspaces = useQuery(workspacesQuery(search.archived));
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q));
+  const documentVisible = useDocumentVisible();
   if (projects.isPending || workspaces.isPending) return <ListSkeleton />;
   const visible = sortWorkspacesByActivity(
     filterWorkspaces(workspaces.data ?? [], {
@@ -55,7 +58,7 @@ export function HomePage() {
           <ul className="flex flex-col px-4 py-2">
             {visible.map((workspace) => (
               <li key={workspace.id}>
-                <WorkspaceRow workspace={workspace} />
+                <WorkspaceRow workspace={workspace} checkUnread={documentVisible} />
               </li>
             ))}
           </ul>
@@ -119,7 +122,8 @@ export function HomePage() {
   );
 }
 
-function WorkspaceRow({ workspace }: { workspace: Workspace }) {
+function WorkspaceRow({ workspace, checkUnread }: { workspace: Workspace; checkUnread: boolean }) {
+  const { ref: rowRef, visible: rowVisible } = useRowVisible();
   const active = workspace.state === "initializing" || workspace.state === "updating";
   const status = useQuery({ ...workspaceStatusQuery(workspace.id), enabled: active });
   const phase = status.data?.status ?? workspace.state;
@@ -127,11 +131,17 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }) {
   return (
     <Link
       to="/workspaces/$workspaceId"
+      ref={rowRef}
       params={{ workspaceId: workspace.id }}
       search={{ archived: false }}
       className="flex min-h-16 flex-col gap-1 rounded-md px-2 py-3 hover:bg-accent"
     >
-      <span className="font-medium">{workspace.name}</span>
+      <span className="flex items-center gap-2 font-medium">
+        {workspace.name}
+        {checkUnread && rowVisible ? (
+          <WorkspaceUnread workspaceId={workspace.id} activity={workspace.lastActivityAt} />
+        ) : null}
+      </span>
       <span className="flex flex-wrap items-center gap-2 text-sm">
         <Badge variant="secondary">{workspaceStatusLabel(phase)}</Badge>
         {active ? <span className="text-muted-foreground">{step}</span> : null}
