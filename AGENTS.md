@@ -24,7 +24,7 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 ```
 
 - Production smoke needs Playwright Chromium (`pnpm exec playwright install chromium`; CI installs browser dependencies too).
-- Last complete suite: **213 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
+- Last complete suite: **223 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
 - Intentional malformed-message-page tests emit React route errors; these are expected negative cases, not happy-path success evidence.
 - Existing non-blocking build warnings: router `replaceRouteChunk` circular dependency and large JS chunks.
 - For publishing, inspect Git history and the final packaged bundle with a trusted secret scanner (e.g. `gitleaks git . --redact`, `gitleaks dir dist --redact`). Never print detected secret values.
@@ -34,7 +34,8 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 - List **only the current user's workspaces** using the API `creator` filter from `/me.userId`, including archived pagination.
 - Home: compact borderless workspace rows, no repository/org labels or redundant headings. Full viewport flex column; **only the list scrolls**. Search, **Create** (no plus icon), and archive toggle stay at the bottom.
 - Home header: small organization label and email-triggered account menu with Sign out. No app logo/name in the authenticated header.
-- Home unread dots use this PWA's read cursors across all non-archived chats. `src/transcript/unread.ts` runs short-lived, non-persisted background checks for visible/near-visible rows, with a shared three-request limiter and 64-event scan budget. Check after the read message ID; never tail-seek or block the list. Refresh on activity change, every minute, and on resume/focus. Unknown/failed checks are not read; opening a project alone must not clear unread.
+- Reserve **purple** for a confirmed merged PR: the workspace banner and a main-list merge icon. Main-list PR detection uses only repository-matching links in already-cached non-archived chat transcripts, then checks GitHub while the row is visible. Do not download/seek chat histories to find PRs, invent links, or share a project's marker with another workspace just because their repositories match.
+- Home unread dots are **blue** and use this PWA's read cursors across all non-archived chats. This is local to the browser, not API/Mac read-status sync; never-opened chats with conversation content count as unread. `src/transcript/unread.ts` runs short-lived, non-persisted background checks for visible/near-visible rows, with a shared three-request limiter and 64-event scan budget. Check after the read message ID; never tail-seek or block the list. Refresh on activity change, every minute, and on resume/focus. Unknown/failed checks are not read; opening a project alone must not clear unread.
 - Inside a workspace (the user also calls this a project): **one** top header with back icon, workspace name and three-dot actions. No account bar or duplicate name/actions row. Preview is in the actions menu.
 - Chats are tabs with colored status dots; no duplicate chat heading. Remember last-selected chat. New-chat plus beside tabs; archived-chat control in tab menu.
 - Chat composer is fixed-height, one row (40px at default root size), with 28px send/cancel buttons **inside** it. Enter sends; Shift+Enter remains supported within the fixed-height textarea. Composer must stay visible.

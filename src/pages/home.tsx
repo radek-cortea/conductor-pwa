@@ -139,7 +139,11 @@ function WorkspaceRow({ workspace, checkUnread }: { workspace: Workspace; checkU
       <span className="flex items-center gap-2 font-medium">
         {workspace.name}
         {checkUnread && rowVisible ? (
-          <WorkspaceUnread workspaceId={workspace.id} activity={workspace.lastActivityAt} />
+          <WorkspaceUnread
+            workspaceId={workspace.id}
+            activity={workspace.lastActivityAt}
+            repoUrl={workspace.repoUrl}
+          />
         ) : null}
       </span>
       <span className="flex flex-wrap items-center gap-2 text-sm">

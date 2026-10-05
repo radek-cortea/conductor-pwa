@@ -136,7 +136,9 @@ try {
     await page.getByLabel("API key", { exact: true }).fill("production-security-smoke-key");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByRole("main", { name: "Workspaces", exact: true }).waitFor();
-    await page.getByRole("img", { name: "Unread messages", exact: true }).waitFor();
+    const unreadDot = page.getByRole("img", { name: "Unread messages", exact: true });
+    await unreadDot.waitFor();
+    assert((await unreadDot.getAttribute("class")).includes("bg-blue-600"));
     await page.getByRole("link", { name: /Smoke project/ }).click();
     await page.getByRole("status", { name: "Pull request merged" }).waitFor();
     await page.waitForFunction(async () =>
@@ -152,6 +154,9 @@ try {
       await page.waitForTimeout(100);
     }
     assert(unreadProbes.includes("pr-message"), "Home must check after the locally read message");
+    const mergedPrIcon = page.getByRole("img", { name: "PR merged", exact: true });
+    await mergedPrIcon.waitFor();
+    assert((await mergedPrIcon.getAttribute("class")).includes("text-purple-900"));
     await page
       .getByRole("img", { name: "Unread messages", exact: true })
       .waitFor({ state: "detached" });
@@ -204,6 +209,7 @@ try {
         navigationAndReload: true,
         anonymousGithubMergedBannerAndArchive: true,
         unreadProjectDotsAndReadCursors: true,
+        purpleMainListMergedPrIconAndBlueUnreadDot: true,
         normalConsoleErrors: 0,
         cspBlocksInlineScript: true,
         cspBlocksExfiltration: true,

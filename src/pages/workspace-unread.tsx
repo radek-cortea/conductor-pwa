@@ -2,13 +2,16 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { readPositionKey } from "@/transcript/load";
 import type { ReadPosition } from "@/transcript/types";
 import { unreadSessionsQuery, workspaceUnreadQuery } from "@/transcript/unread";
+import { WorkspacePrStatus } from "@/pages/workspace-pr-status";
 
 export function WorkspaceUnread({
   workspaceId,
   activity,
+  repoUrl,
 }: {
   workspaceId: string;
   activity?: string;
+  repoUrl: string;
 }) {
   const client = useQueryClient();
   const sessions = useQuery(unreadSessionsQuery(workspaceId, activity));
@@ -26,18 +29,19 @@ export function WorkspaceUnread({
     messageId: reads[index]?.data?.messageId ?? null,
   }));
   const unread = useQuery(workspaceUnreadQuery(workspaceId, activity, sessions.data, cursors));
-  if (unread.data === "unread") {
-    return (
-      <span
-        role="img"
-        aria-label="Unread messages"
-        title="Unread messages"
-        className="size-2 shrink-0 rounded-full bg-purple-700"
-      />
-    );
-  }
-  if (sessions.isError || unread.isError || unread.data === "unknown") {
-    return <span className="sr-only">Unread status unavailable</span>;
-  }
-  return null;
+  return (
+    <>
+      {unread.data === "unread" ? (
+        <span
+          role="img"
+          aria-label="Unread messages"
+          title="Unread in this PWA (local to this browser)"
+          className="size-2 shrink-0 rounded-full bg-blue-600"
+        />
+      ) : sessions.isError || unread.isError || unread.data === "unknown" ? (
+        <span className="sr-only">Unread status unavailable</span>
+      ) : null}
+      <WorkspacePrStatus chats={chats} repoUrl={repoUrl} />
+    </>
+  );
 }
