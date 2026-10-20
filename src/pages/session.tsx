@@ -12,6 +12,7 @@ import { TranscriptSkeleton } from "@/pages/skeletons";
 import { loadHistory, type HistoryDirection } from "@/transcript/load";
 import { TranscriptView, type VisibleEntry } from "@/transcript/transcript-view";
 import { turnPhase } from "@/transcript/turn-phase";
+import { latestTurnTiming } from "@/transcript/turn-timing";
 import { promptConfirmed, promptDelivery } from "@/transcript/delivery";
 import type { TranscriptEntry } from "@/transcript/types";
 import { Button } from "@/ui/button";
@@ -192,6 +193,10 @@ function SessionChat({ sessionId }: { sessionId: string }) {
         })),
     ];
   }, [entries, optimistic, confirmedIds, phase]);
+  const timing = useMemo(
+    () => (status ? latestTurnTiming(messages.data, phase, optimistic.at(-1)) : undefined),
+    [messages.data, phase, optimistic, status],
+  );
   if (messages.isPending || !windowReady) return <TranscriptSkeleton />;
   if (!messages.data)
     return (
@@ -247,11 +252,7 @@ function SessionChat({ sessionId }: { sessionId: string }) {
         onLoad={onLoad}
         loadingHistory={history.isPending}
         historyFailed={history.isError}
-        finalMessageId={
-          status === "idle" && phase === "settled"
-            ? visible.findLast((entry) => entry.kind === "assistant")?.id
-            : undefined
-        }
+        timing={timing}
       />
       <form
         className="shrink-0 bg-background px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"

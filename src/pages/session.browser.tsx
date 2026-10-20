@@ -4,7 +4,13 @@ import { page, userEvent } from "vitest/browser";
 import { writeCredential } from "@/auth/credential";
 import { API_ORIGIN, requestsTo, TEST_API_KEY } from "@/test/handlers";
 import { worker } from "@/test/worker";
-import { assistantFixture, toolFixture, unknownFixture, userFixture } from "@/transcript/fixtures";
+import {
+  assistantFixture,
+  thinkingFixture,
+  toolFixture,
+  unknownFixture,
+  userFixture,
+} from "@/transcript/fixtures";
 import { messagesKey, MESSAGE_PAGE_SIZE } from "@/transcript/load";
 import type { MessagesState } from "@/transcript/types";
 import type { TranscriptMessage } from "@/api/types";
@@ -96,7 +102,7 @@ test("session renders assistant text, sends a prompt, and appends the next poll"
     .toBeVisible();
 });
 
-test("system instructions and tool details are collapsed, and the final answer is distinct", async () => {
+test("instructions, thinking and tools are collapsed, and final answers have no special decoration", async () => {
   writeCredential(TEST_API_KEY);
   serveTranscript([
     {
@@ -136,9 +142,10 @@ test("system instructions and tool details are collapsed, and the final answer i
         },
       },
     },
+    { ...thinkingFixture, sessionIndex: 3 },
     {
       ...assistantFixture,
-      sessionIndex: 3,
+      sessionIndex: 4,
       content: {
         turnId: "turn",
         rawPayload: {
@@ -153,7 +160,7 @@ test("system instructions and tool details are collapsed, and the final answer i
     {
       ...assistantFixture,
       id: "result",
-      sessionIndex: 4,
+      sessionIndex: 5,
       content: {
         turnId: "turn",
         rawPayload: { type: "result", subtype: "success", result: "The final answer." },
@@ -162,14 +169,135 @@ test("system instructions and tool details are collapsed, and the final answer i
   ]);
   await renderApp("/workspaces/ws-ready/sessions/ses-live");
   await expect.element(page.getByText("The final answer.", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Final response", { exact: true })).toBeVisible();
+  expect(page.getByText("Final response", { exact: true }).query()).toBeNull();
+  expect(page.getByText("Final message", { exact: true }).query()).toBeNull();
+  const finalReply = page
+    .getByText("The final answer.", { exact: true })
+    .element()
+    .closest<HTMLElement>(".transcript-markdown")!;
+  expect(finalReply.className).toBe("transcript-markdown");
+  const finalStyle = getComputedStyle(finalReply);
+  expect(finalStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(finalStyle.borderLeftWidth).toBe("0px");
+  expect(finalStyle.padding).toBe("0px");
+  const thinking = page.getByText("Thinking", { exact: true }).element();
+  const tool = page.getByText("Tool · Shell", { exact: true }).element();
+  expect(thinking.closest("details")!.className).toBe(tool.closest("details")!.className);
+  const thinkingStyle = getComputedStyle(thinking);
+  expect(thinkingStyle.fontSize).toBe("12px");
+  expect(thinkingStyle.lineHeight).toBe("16px");
+  expect(thinkingStyle.color).toBe(getComputedStyle(tool).color);
+  expect(getComputedStyle(thinking.closest("details")!).borderTopWidth).toBe("0px");
+  expect(getComputedStyle(thinking.closest("details")!).padding).toBe("0px");
+  expect(page.getByText("Checking the form component.", { exact: true }).query()).toBeNull();
+  await userEvent.click(page.getByText("Thinking", { exact: true }));
+  await expect
+    .element(page.getByText("Checking the form component.", { exact: true }))
+    .toBeVisible();
+  expect(
+    getComputedStyle(page.getByText("Checking the form component.", { exact: true }).element())
+      .color,
+  ).toBe(thinkingStyle.color);
+  const instructions = page.getByText("System instructions", { exact: true }).element();
+  expect(instructions.closest("details")!.className).toBe(tool.closest("details")!.className);
+  const instructionsStyle = getComputedStyle(instructions);
+  expect(instructionsStyle.fontSize).toBe("12px");
+  expect(instructionsStyle.lineHeight).toBe("16px");
+  expect(instructionsStyle.color).toBe(getComputedStyle(tool).color);
+  const instructionsDetailsStyle = getComputedStyle(instructions.closest("details")!);
+  expect(instructionsDetailsStyle.borderTopWidth).toBe("0px");
+  expect(instructionsDetailsStyle.padding).toBe("0px");
   expect(page.getByText("Hidden instruction rule.").query()).toBeNull();
   expect(page.getByText("hello", { exact: true }).query()).toBeNull();
   await userEvent.click(page.getByText("System instructions", { exact: true }));
   await expect.element(page.getByText("Hidden instruction rule.", { exact: true })).toBeVisible();
+  expect(
+    getComputedStyle(page.getByText("Hidden instruction rule.", { exact: true }).element()).color,
+  ).toBe(instructionsStyle.color);
   await userEvent.click(page.getByText("Tool · Shell", { exact: true }));
   await expect.element(page.getByText("hello", { exact: true })).toBeVisible();
   await expect.element(page.getByText(/"command": "echo hello"/)).toBeVisible();
+});
+
+test("the latest message has a ticking gray timer that freezes with duration and end time", async () => {
+  writeCredential(TEST_API_KEY);
+  const start = Date.now() - 1_000;
+  let status = "working";
+  const rows: TranscriptMessage[] = [
+    { ...userFixture, receivedAt: new Date(start).toISOString() },
+    { ...assistantFixture, receivedAt: new Date(start + 500).toISOString() },
+  ];
+  serveTranscript(rows);
+  worker.use(
+    http.get(`${API_ORIGIN}/v0/sessions/:sessionId/status`, () =>
+      HttpResponse.json({ status, updatedAt: new Date().toISOString() }),
+    ),
+  );
+  await renderApp("/workspaces/ws-ready/sessions/ses-live");
+  const footer = page.getByTestId("turn-timing");
+  await expect.element(footer).toHaveTextContent(/In progress · \d+\.\ds/);
+  const initial = footer.element().textContent;
+  await expect.poll(() => footer.element().textContent).not.toBe(initial);
+  expect(document.querySelectorAll('[data-testid="turn-timing"]')).toHaveLength(1);
+  const style = getComputedStyle(footer.element());
+  expect(style.fontSize).toBe("12px");
+  expect(style.lineHeight).toBe("16px");
+  expect(footer.element().classList.contains("text-gray-400")).toBe(true);
+  expect(style.borderTopWidth).toBe("0px");
+  expect(footer.element().previousElementSibling?.getAttribute("data-entry-id")).toBe(
+    "msg-assistant:0",
+  );
+
+  const end = new Date(start + 2_750).toISOString();
+  rows.push({
+    ...assistantFixture,
+    id: "timed-final",
+    sessionIndex: 2,
+    receivedAt: end,
+    content: { type: "result", subtype: "success", result: "Timed final reply." },
+  });
+  status = "idle";
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: messagesKey("ses-live") }),
+    queryClient.invalidateQueries({ queryKey: ["sessions", "ses-live", "status"] }),
+  ]);
+  await expect.element(footer).toHaveTextContent("Finished in ~2.7s · ended");
+  expect(footer.element().querySelector("time")?.dateTime).toBe(end);
+  expect(footer.element().previousElementSibling?.getAttribute("data-entry-id")).toBe(
+    "timed-final:0",
+  );
+  const finished = footer.element().textContent;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  expect(footer.element().textContent).toBe(finished);
+});
+
+test("missing prompts show unavailable duration or observed progress without resetting on each message", async () => {
+  writeCredential(TEST_API_KEY);
+  const rows = [assistantFixture];
+  serveTranscript(rows);
+  let status = "idle";
+  worker.use(
+    http.get(`${API_ORIGIN}/v0/sessions/:sessionId/status`, () =>
+      HttpResponse.json({ status, updatedAt: new Date().toISOString() }),
+    ),
+  );
+  await renderApp("/workspaces/ws-ready/sessions/ses-live");
+  await expect
+    .element(page.getByTestId("turn-timing"))
+    .toHaveTextContent("Finished · duration unavailable · ended");
+  expect(page.getByTestId("turn-timing").element().querySelector("time")?.dateTime).toBe(
+    assistantFixture.receivedAt,
+  );
+  status = "working";
+  await queryClient.invalidateQueries({ queryKey: ["sessions", "ses-live", "status"] });
+  const footer = page.getByTestId("turn-timing");
+  await expect.element(footer).toHaveTextContent(/In progress · observed \d+\.\ds/);
+  const node = footer.element();
+  const initial = node.textContent;
+  await expect.poll(() => footer.element().textContent).not.toBe(initial);
+  rows.push({ ...assistantFixture, id: "next-part", sessionIndex: 2 });
+  await queryClient.invalidateQueries({ queryKey: messagesKey("ses-live") });
+  expect(footer.element()).toBe(node);
 });
 
 test("tool rows are small, gray and borderless, with half-line-height gaps", async () => {

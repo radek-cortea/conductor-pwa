@@ -24,7 +24,7 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 ```
 
 - Production smoke needs Playwright Chromium (`pnpm exec playwright install chromium`; CI installs browser dependencies too).
-- Last complete suite: **193 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
+- Last complete suite: **208 passing tests**, including phone/desktop browser variants. Keep the StrictMode wrapper in `src/test/render-app.tsx`.
 - Intentional malformed-message-page tests emit React route errors; these are expected negative cases, not happy-path success evidence.
 - Existing non-blocking build warnings: router `replaceRouteChunk` circular dependency and large JS chunks.
 - For publishing, inspect Git history and the final packaged bundle with a trusted secret scanner (e.g. `gitleaks git . --redact`, `gitleaks dir dist --redact`). Never print detected secret values.
@@ -40,9 +40,10 @@ PAGES_BASE_PATH=/conductor-pwa/ node scripts/security-smoke.mjs
 - Keep that header visible during account/detail/session/transcript loading. `beforeLoad` carries known workspace metadata from QueryClient through router context; the pending header observes real detail updates without seeding list data as fresh detail data. Unknown deep links show a name placeholder and working back button. Keep loader cancellation recovery and pending thresholds unchanged.
 - Chats are tabs with colored status dots; no duplicate chat heading. Remember last-selected chat. New-chat plus beside tabs; archived-chat control in tab menu.
 - Chat composer is fixed-height, one row (40px at default root size), with 28px send/cancel buttons **inside** it. Enter sends; Shift+Enter remains supported within the fixed-height textarea. Composer must stay visible.
-- System instructions, thinking and tools collapse by default; expanded bodies render lazily. Tool names/inputs/outputs/exit codes are inspectable when provided by the API.
+- System instructions, thinking and tools collapse by default; expanded bodies render lazily. All three use the same compact gray, borderless disclosure; no card variant. Tool names/inputs/outputs/exit codes are inspectable when provided by the API.
 - Tool summaries: 12px light gray, 16px line height, no border/padding; consecutive tool rows have an **8px gap** (half line height). Preserve normal spacing between other message types.
-- Distinguish final replies, including an SDK result duplicating prior assistant text. Do not mutate input entries during deduplication.
+- Final replies render like ordinary assistant text: no card, background, border or final-message label. Preserve final-reply metadata and SDK-result deduplication; do not mutate input entries during deduplication.
+- Beneath only the latest message, show a small gray turn timer updating every 100ms while pending/working, then duration and local end date/time. Timings are estimates from prompt/reply receipt timestamps (including the final SDK result); local sends include queue time. Never infer a start across sparse cache gaps or attach latest-turn timing to older history. Missing starts show observed elapsed time while running and duration unavailable when finished. Timer ticks stay local to the footer, make no requests and are not announced repeatedly by screen readers.
 - Sending/Queued/Processing/Sent must reflect progress, not remain stuck at the initial POST response. Reconcile API/SDK IDs and system-instruction-prefixed user echoes; don't match an old identical prompt.
 - Create form has no “Pick a repository…” explanatory paragraph. Remember project, branch, agent, model and effort by user/organization; **not** workspace name or prompt. Validate restored choices against current projects/models. Reset branch when changing project.
 - Use Lucide. App name remains **Conductor PWA** for sign-in, document title and install manifest. `public/favicon.svg` is editable artwork, not necessarily an exact copy of `public/example.svg`; keep square padding and regenerate icons with `pnpm icons:generate` after edits.

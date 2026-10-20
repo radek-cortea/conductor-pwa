@@ -4,6 +4,8 @@ import type { DeliveryState } from "@/transcript/delivery";
 import type { HistoryDirection } from "@/transcript/load";
 import type { MessagesState, TranscriptEntry } from "@/transcript/types";
 import { MessageMarkdown } from "@/transcript/message-markdown";
+import { TurnTimingFooter } from "@/transcript/turn-timing-footer";
+import type { TurnTiming } from "@/transcript/turn-timing";
 import { Button } from "@/ui/button";
 
 export type VisibleEntry = TranscriptEntry & { delivery?: DeliveryState };
@@ -12,7 +14,7 @@ type Props = {
   state: MessagesState;
   loadingHistory: boolean;
   historyFailed: boolean;
-  finalMessageId?: string;
+  timing?: TurnTiming;
   onLoad: (direction: HistoryDirection) => Promise<boolean>;
 };
 type Anchor = { id: string; top: number; keepBottom: boolean };
@@ -223,16 +225,19 @@ export function TranscriptView(props: Props) {
                         : "mt-3"
                   }
                 >
-                  <TranscriptRow
-                    entry={entry}
-                    final={
-                      entry.kind === "assistant" &&
-                      (entry.final || entry.id === props.finalMessageId)
-                    }
-                  />
+                  <TranscriptRow entry={entry} />
                 </div>
               ))
           )}
+          {state.endOffset >= state.total &&
+          !state.pollHasMore &&
+          entries.some((entry) => entry.kind !== "unknown") &&
+          props.timing ? (
+            <TurnTimingFooter
+              key={props.timing.running ? "running" : "finished"}
+              timing={props.timing}
+            />
+          ) : null}
         </div>
       </div>
       {props.loadingHistory ? (
@@ -260,31 +265,15 @@ export function TranscriptView(props: Props) {
   );
 }
 
-function Disclosure({
-  label,
-  children,
-  compact = false,
-}: {
-  label: string;
-  children: ReactNode;
-  compact?: boolean;
-}) {
+function Disclosure({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <details
-      className={compact ? "text-xs leading-4 text-gray-400" : "rounded-md border px-3 py-1"}
+      className="text-xs leading-4 text-gray-400"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary
-        className={
-          compact
-            ? "cursor-pointer text-xs leading-4 break-words"
-            : "min-h-11 cursor-pointer py-2 text-sm break-words"
-        }
-      >
-        {label}
-      </summary>
-      {open ? <div className={compact ? "mt-2" : "pb-2"}>{children}</div> : null}
+      <summary className="cursor-pointer text-xs leading-4 break-words">{label}</summary>
+      {open ? <div className="mt-2">{children}</div> : null}
     </details>
   );
 }
@@ -295,9 +284,7 @@ function MessageBody({ text, markdown = false }: { text: string; markdown?: bool
       {splitSystemInstructions(text).map((part) =>
         part.kind === "system" ? (
           <Disclosure key={part.start} label="System instructions">
-            <pre className="text-xs break-words whitespace-pre-wrap text-muted-foreground">
-              {part.text.trim()}
-            </pre>
+            <pre className="text-xs break-words whitespace-pre-wrap">{part.text.trim()}</pre>
           </Disclosure>
         ) : markdown ? (
           <MessageMarkdown key={part.start} text={part.text} />
@@ -311,7 +298,7 @@ function MessageBody({ text, markdown = false }: { text: string; markdown?: bool
   );
 }
 
-function TranscriptRow({ entry, final }: { entry: VisibleEntry; final?: boolean }) {
+function TranscriptRow({ entry }: { entry: VisibleEntry }) {
   if (entry.kind === "user")
     return (
       <div className="ml-8 rounded-lg bg-secondary px-3 py-3">
@@ -330,22 +317,19 @@ function TranscriptRow({ entry, final }: { entry: VisibleEntry; final?: boolean 
     );
   if (entry.kind === "assistant")
     return (
-      <div
-        className={`transcript-markdown${final ? " rounded-md border-l-2 border-primary/50 bg-primary/5 px-3 py-2" : ""}`}
-      >
-        {final ? <p className="mb-2 text-xs font-medium text-primary">Final response</p> : null}
+      <div className="transcript-markdown">
         <MessageBody text={entry.text} markdown />
       </div>
     );
   if (entry.kind === "thinking")
     return (
       <Disclosure label="Thinking">
-        <p className="break-words whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
+        <p className="break-words whitespace-pre-wrap">{entry.text}</p>
       </Disclosure>
     );
   if (entry.kind === "tool")
     return (
-      <Disclosure compact label={`Tool · ${entry.name}${entry.error ? " (failed)" : ""}`}>
+      <Disclosure label={`Tool · ${entry.name}${entry.error ? " (failed)" : ""}`}>
         <div className="grid gap-2 text-xs">
           {entry.input !== undefined ? (
             <div>
